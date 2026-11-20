@@ -16,10 +16,11 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.stream.Stream;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import me.stella.CapybaraNative;
 import me.stella.CapybaraScan;
-import me.stella.scan.ScanProgress;
+import me.stella.scan.model.ScanProgress;
 import me.stella.utility.MutableOptional;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -40,7 +41,6 @@ import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.level.storage.ValueInput;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.craftbukkit.CraftServer;
@@ -49,576 +49,372 @@ import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.inventory.ItemStack;
 
 public class Capybara2111Folia implements CapybaraNative {
-   private static final MutableOptional<HolderLookup.Provider> lookupProvider = MutableOptional.<HolderLookup.Provider>empty();
+
+   private static final MutableOptional<HolderLookup.Provider> LOOKUP_PROVIDER = MutableOptional.empty();
    private static final Constructor<?> REGION_STORAGE_CTOR;
    private static final Method GET_REGION_FILE;
 
-   private static HolderLookup.Provider loadProvider() {
-      return ((CraftServer)Bukkit.getServer()).getHandle().getServer().registryAccess();
-   }
-
-   private HolderLookup.Provider getProvider() {
-      return lookupProvider.provide(Capybara2111Folia::loadProvider);
-   }
-
-   public static void cleanup() {
-      lookupProvider.set(null);
-   }
-
-   public boolean isMatch(ItemStack model, ItemStack entry) {
-      if (entry != null && entry.getType() != Material.AIR) {
-         String modelPluginId = CapybaraScan.toPluginItemID(model);
-         if (modelPluginId != null) {
-            return Objects.equals(modelPluginId, CapybaraScan.toPluginItemID(entry));
-         } else if (this.isBasic(model) && model.getType() == entry.getType()) {
-            return true;
-         } else if (entry.isSimilar(model)) {
-            return true;
-         } else {
-            net.minecraft.world.item.ItemStack nmsModel = CraftItemStack.asNMSCopy(model);
-            net.minecraft.world.item.ItemStack nmsEntry = CraftItemStack.asNMSCopy(entry);
-            return this.deepNbtMatch(nmsModel, nmsEntry);
-         }
-      } else {
-         return false;
+   static {
+      try {
+         REGION_STORAGE_CTOR = RegionFileStorage.class.getDeclaredConstructor(RegionStorageInfo.class, Path.class, boolean.class);
+         REGION_STORAGE_CTOR.setAccessible(true);
+         GET_REGION_FILE = RegionFileStorage.class.getDeclaredMethod("getRegionFile", ChunkPos.class, boolean.class);
+         GET_REGION_FILE.setAccessible(true);
+      } catch (Exception e) {
+         throw new RuntimeException("Failed to initialize NMS reflection for Capybara2111Folia", e);
       }
    }
 
+   private static HolderLookup.Provider loadProvider() {
+      return ((CraftServer) Bukkit.getServer()).getHandle().getServer().registryAccess();
+   }
+
+   private HolderLookup.Provider getProvider() {
+      return LOOKUP_PROVIDER.provide(Capybara2111Folia::loadProvider);
+   }
+
+   public static void cleanup() {
+      LOOKUP_PROVIDER.set(null);
+   }
+
+   @Override
+   public boolean isMatch(ItemStack model, ItemStack entry) {
+      if (entry == null || entry.getType() == Material.AIR) {
+         return false;
+      }
+      String modelPluginId = CapybaraScan.toPluginItemID(model);
+      if (modelPluginId != null) {
+         return Objects.equals(modelPluginId, CapybaraScan.toPluginItemID(entry));
+      }
+      if (isBasic(model) && model.getType() == entry.getType()) {
+         return true;
+      }
+      if (entry.isSimilar(model)) {
+         return true;
+      }
+      return deepNbtMatch(CraftItemStack.asNMSCopy(model), CraftItemStack.asNMSCopy(entry));
+   }
+
    private boolean deepNbtMatch(net.minecraft.world.item.ItemStack nmsModel, net.minecraft.world.item.ItemStack nmsEntry) {
-      HolderLookup.Provider provider = this.getProvider();
+      HolderLookup.Provider provider = getProvider();
       TagValueOutput nbtReader = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, provider);
       TagValueOutput entryReader = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, provider);
       nbtReader.store(net.minecraft.world.item.ItemStack.MAP_CODEC, nmsModel);
       entryReader.store(net.minecraft.world.item.ItemStack.MAP_CODEC, nmsEntry);
+
       CompoundTag modelNBT = nbtReader.buildResult().getCompoundOrEmpty("minecraft:custom_data").getCompoundOrEmpty("PublicBukkitValues");
-      CompoundTag modelEntry = entryReader.buildResult().getCompoundOrEmpty("minecraft:custom_data").getCompoundOrEmpty("PublicBukkitValues");
+      CompoundTag entryNBT = entryReader.buildResult().getCompoundOrEmpty("minecraft:custom_data").getCompoundOrEmpty("PublicBukkitValues");
+
       if (modelNBT.contains("excellentcrates:crate_key.id")) {
-         return modelEntry.contains("excellentcrates:crate_key.id") && Objects.equals(modelEntry.getString("excellentcrates:crate_key.id"), modelNBT.getString("excellentcrates:crate_key.id"));
-      } else if (!modelNBT.contains("crazyvouchers:crazyvouchers_voucher_item")) {
-         return false;
-      } else {
-         return modelEntry.contains("crazyvouchers:crazyvouchers_voucher_item") && Objects.equals(modelEntry.getString("crazyvouchers:crazyvouchers_voucher_item"), modelNBT.getString("crazyvouchers:crazyvouchers_voucher_item"));
+         return entryNBT.contains("excellentcrates:crate_key.id")
+               && Objects.equals(entryNBT.getString("excellentcrates:crate_key.id"),
+               modelNBT.getString("excellentcrates:crate_key.id"));
       }
+      if (modelNBT.contains("crazyvouchers:crazyvouchers_voucher_item")) {
+         return entryNBT.contains("crazyvouchers:crazyvouchers_voucher_item")
+               && Objects.equals(entryNBT.getString("crazyvouchers:crazyvouchers_voucher_item"),
+               modelNBT.getString("crazyvouchers:crazyvouchers_voucher_item"));
+      }
+      return false;
    }
 
+   @Override
    public Map<String, Integer> inventory(ItemStack target, ScanProgress progress) {
-      File dir = Bukkit.getServer().getWorldContainer();
-      List var10003 = Bukkit.getWorlds();
-      File main = new File(dir, ((World)var10003.get(0)).getName() + "/playerdata");
-      if (!main.exists()) {
-         return new HashMap<>();
-      } else {
-         File[] files = main.listFiles();
-         if (files == null) {
-            return new HashMap<>();
-         } else {
-            Map<String, Integer> output = new ConcurrentHashMap<>();
-            progress.watch(output).total(Arrays.stream(files).filter((f) -> f.isFile() && f.getName().endsWith(".dat")).count());
-            Arrays.stream(files).parallel().filter((f) -> f.isFile() && f.getName().endsWith(".dat")).forEach((file) -> {
-               try {
-                  CompoundTag dataCompound = NbtIo.readCompressed(file.getAbsoluteFile().toPath(), NbtAccounter.unlimitedHeap());
-                  String name = (String)dataCompound.getCompoundOrEmpty("bukkit").getString("lastKnownName").orElse("");
-                  ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), dataCompound);
-                  ValueInput.TypedInputList<ItemStackWithSlot> listTag = tagInput.listOrEmpty("Inventory", ItemStackWithSlot.CODEC);
-                  int count = this.countMatchesInList(listTag, target);
-                  if (count > 0) {
-                     output.put(name, count);
-                  }
-               } catch (Throwable t) {
-                  t.printStackTrace();
-               } finally {
-                  progress.advance();
-               }
-
-            });
-            return output;
-         }
-      }
+      return scanPlayerData(target, progress, "Inventory");
    }
 
+   @Override
    public Map<String, Integer> ender(ItemStack target, ScanProgress progress) {
-      File dir = Bukkit.getServer().getWorldContainer();
-      List var10003 = Bukkit.getWorlds();
-      File main = new File(dir, ((World)var10003.get(0)).getName() + "/playerdata");
-      if (!main.exists()) {
-         return new HashMap<>();
-      } else {
-         File[] files = main.listFiles();
-         if (files == null) {
-            return new HashMap<>();
-         } else {
-            Map<String, Integer> output = new ConcurrentHashMap<>();
-            progress.watch(output).total(Arrays.stream(files).filter((f) -> f.isFile() && f.getName().endsWith(".dat")).count());
-            Arrays.stream(files).parallel().filter((f) -> f.isFile() && f.getName().endsWith(".dat")).forEach((file) -> {
-               try {
-                  CompoundTag dataCompound = NbtIo.readCompressed(file.getAbsoluteFile().toPath(), NbtAccounter.unlimitedHeap());
-                  String name = (String)((CompoundTag)dataCompound.getCompound("bukkit").orElse(new CompoundTag())).getString("lastKnownName").orElse("");
-                  ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), dataCompound);
-                  ValueInput.TypedInputList<ItemStackWithSlot> listTag = tagInput.listOrEmpty("EnderItems", ItemStackWithSlot.CODEC);
-                  int count = this.countMatchesInList(listTag, target);
-                  if (count > 0) {
-                     output.put(name, count);
-                  }
-               } catch (Throwable t) {
-                  t.printStackTrace();
-               } finally {
-                  progress.advance();
-               }
+      return scanPlayerData(target, progress, "EnderItems");
+   }
 
-            });
-            return output;
-         }
+   private Map<String, Integer> scanPlayerData(ItemStack target, ScanProgress progress, String listKey) {
+      File[] files = CapybaraNative.playerDataFiles();
+      if (files.length == 0) {
+         return new HashMap<>();
       }
+      Map<String, Integer> output = new ConcurrentHashMap<>();
+      progress.watch(output).total(files.length);
+
+      Arrays.stream(files).parallel().forEach(file -> {
+         try {
+            CompoundTag dataCompound = NbtIo.readCompressed(file.getAbsoluteFile().toPath(), NbtAccounter.unlimitedHeap());
+            String name = dataCompound.getCompoundOrEmpty("bukkit").getString("lastKnownName").orElse("");
+            ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, getProvider(), dataCompound);
+            ValueInput.TypedInputList<ItemStackWithSlot> listTag = tagInput.listOrEmpty(listKey, ItemStackWithSlot.CODEC);
+            int count = countMatchesInList(listTag, target);
+            if (count > 0) {
+               output.put(name, count);
+            }
+         } catch (Throwable t) {
+            t.printStackTrace();
+         } finally {
+            progress.advance();
+         }
+      });
+      return output;
    }
 
    private int countMatchesInList(ValueInput.TypedInputList<ItemStackWithSlot> list, ItemStack target) {
       int total = 0;
-
-      for(ItemStackWithSlot item : list) {
+      for (ItemStackWithSlot item : list) {
          net.minecraft.world.item.ItemStack nms = item.stack();
-         if (!nms.isEmpty()) {
-            ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
-            if (bukkitStack.getType() != Material.AIR) {
-               if (this.isMatch(target, bukkitStack)) {
-                  total += bukkitStack.getAmount();
-               } else {
-                  int depth = this.checkDepth(bukkitStack, target);
-                  if (depth > 0) {
-                     total += depth;
-                  }
-               }
-            }
+         if (nms.isEmpty()) {
+            continue;
+         }
+         ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
+         if (bukkitStack.getType() == Material.AIR) {
+            continue;
+         }
+         if (isMatch(target, bukkitStack)) {
+            total += bukkitStack.getAmount();
+         } else {
+            total += checkDepth(bukkitStack, target);
          }
       }
-
       return total;
    }
 
+   @Override
    public Map<String, Integer> world(ItemStack itemStack, String world, ScanProgress progress) {
-      File dir = Bukkit.getServer().getWorldContainer();
-      CraftWorld craftWorld = (CraftWorld)Bukkit.getWorld(world);
-      if (craftWorld == null) {
-         return new ConcurrentHashMap<>();
-      } else {
-         new File(dir, craftWorld.getName());
-         ServerLevel level = craftWorld.getHandle();
-         Path dimensionPath = level.levelStorageAccess.getDimensionPath(level.dimension());
-         File root = new File(dimensionPath.toAbsolutePath().toFile(), "region");
-         if (root.exists() && root.isDirectory()) {
-            File[] files = root.listFiles((d, n) -> n.endsWith(".mca"));
-            if (files != null && files.length != 0) {
-               ScanSession session = new ScanSession(itemStack);
-               Map<String, Integer> output = new ConcurrentHashMap<>();
-               ConcurrentLinkedQueue<File> fileQueue = new ConcurrentLinkedQueue<>(Arrays.asList(files));
-               progress.watch(output).total(files.length);
-               RegionStorageInfo info = new RegionStorageInfo(level.levelStorageAccess.getLevelId(), level.dimension(), "chunk");
-               Path rootPath = root.toPath();
-               int workerCount = Math.min(6, Runtime.getRuntime().availableProcessors());
-               List<CompletableFuture<Void>> futures = new ArrayList<>(workerCount);
-
-               for(int i = 0; i < workerCount; ++i) {
-                  futures.add(CapybaraScan.runAsync(() -> {
-                     Object storageInstance = null;
-
-                     try {
-                        storageInstance = REGION_STORAGE_CTOR.newInstance(info, rootPath, false);
-                        RegionFileStorage storage = (RegionFileStorage)storageInstance;
-
-                        File file;
-                        while((file = (File)fileQueue.poll()) != null) {
-                           this.processRegionFile(file, storage, session, output);
-                           progress.advance();
-                        }
-                     } catch (Exception var17) {
-                     } finally {
-                        if (storageInstance instanceof AutoCloseable) {
-                           try {
-                              ((AutoCloseable)storageInstance).close();
-                           } catch (Exception var16) {
-                           }
-                        }
-
-                     }
-
-                  }));
-               }
-
-               CompletableFuture.allOf((CompletableFuture[])futures.toArray(new CompletableFuture[0])).join();
-               return output;
-            } else {
-               return new ConcurrentHashMap<>();
-            }
-         } else {
-            return new ConcurrentHashMap<>();
-         }
-      }
+      ScanSession session = new ScanSession(itemStack);
+      Map<String, Integer> output = new ConcurrentHashMap<>();
+      runWorldScan(world, progress, output, (file, storage) ->
+            processRegionFile(file, storage, chunkNBT -> processChunkNBT(chunkNBT, session, output)));
+      return output;
    }
 
-   private void processRegionFile(File file, RegionFileStorage storage, ScanSession session, Map<String, Integer> output) {
+   @Override
+   public Map<String, Integer> pollWorld(String worldId, ScanProgress progress) {
+      Map<String, Integer> output = new ConcurrentHashMap<>();
+      runWorldScan(worldId, progress, output, (file, storage) ->
+            processRegionFile(file, storage, chunkNBT -> processChunkNBTForPoll(chunkNBT, output)));
+      return output;
+   }
+
+   private void runWorldScan(String worldName, ScanProgress progress, Map<String, Integer> output,
+         BiConsumer<File, RegionFileStorage> regionProcessor) {
+      CraftWorld craftWorld = (CraftWorld) Bukkit.getWorld(worldName);
+      if (craftWorld == null) {
+         return;
+      }
+      ServerLevel level = craftWorld.getHandle();
+      Path dimensionPath = level.levelStorageAccess.getDimensionPath(level.dimension());
+      File root = new File(dimensionPath.toAbsolutePath().toFile(), "region");
+      if (!root.isDirectory()) {
+         return;
+      }
+      File[] files = root.listFiles((dir, name) -> name.endsWith(".mca"));
+      if (files == null || files.length == 0) {
+         return;
+      }
+
+      ConcurrentLinkedQueue<File> fileQueue = new ConcurrentLinkedQueue<>(Arrays.asList(files));
+      progress.watch(output).total(files.length);
+      RegionStorageInfo info = new RegionStorageInfo(level.levelStorageAccess.getLevelId(), level.dimension(), "chunk");
+      Path rootPath = root.toPath();
+      int workerCount = Math.min(6, Runtime.getRuntime().availableProcessors());
+      List<CompletableFuture<Void>> futures = new ArrayList<>(workerCount);
+
+      for (int i = 0; i < workerCount; i++) {
+         futures.add(CapybaraScan.runAsync(() -> {
+            Object storageInstance = null;
+            try {
+               storageInstance = REGION_STORAGE_CTOR.newInstance(info, rootPath, false);
+               RegionFileStorage storage = (RegionFileStorage) storageInstance;
+               File file;
+               while ((file = fileQueue.poll()) != null) {
+                  try {
+                     regionProcessor.accept(file, storage);
+                  } finally {
+                     progress.advance();
+                  }
+               }
+            } catch (Exception ignored) {
+            } finally {
+               if (storageInstance instanceof AutoCloseable closeable) {
+                  try {
+                     closeable.close();
+                  } catch (Exception ignored) {
+                  }
+               }
+            }
+         }));
+      }
+      CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+   }
+
+   private void processRegionFile(File file, RegionFileStorage storage, Consumer<CompoundTag> chunkConsumer) {
       try {
          ChunkPos regionCoord = RegionFileStorage.getRegionFileCoordinates(file.toPath());
          if (regionCoord == null) {
             return;
          }
-
-         RegionFile regionFile = (RegionFile)GET_REGION_FILE.invoke(storage, regionCoord, true);
-
-         for(int x = 0; x < 32; ++x) {
-            for(int z = 0; z < 32; ++z) {
+         RegionFile regionFile = (RegionFile) GET_REGION_FILE.invoke(storage, regionCoord, true);
+         if (regionFile == null) {
+            return;
+         }
+         for (int x = 0; x < 32; x++) {
+            for (int z = 0; z < 32; z++) {
                ChunkPos chunkCoord = new ChunkPos((regionCoord.x << 5) + x, (regionCoord.z << 5) + z);
-               if (regionFile.hasChunk(chunkCoord)) {
-                  DataInputStream stream = regionFile.getChunkDataInputStream(chunkCoord);
-
-                  label64: {
-                     label63: {
-                        try {
-                           if (stream != null) {
-                              CompoundTag chunkNBT = NbtIo.read(stream);
-                              if (chunkNBT.isEmpty()) {
-                                 break label63;
-                              }
-
-                              this.processChunkNBT(chunkNBT, session, output);
-                              break label64;
-                           }
-                        } catch (Throwable var14) {
-                           if (stream != null) {
-                              try {
-                                 stream.close();
-                              } catch (Throwable var13) {
-                                 var14.addSuppressed(var13);
-                              }
-                           }
-
-                           throw var14;
-                        }
-
-                        if (stream != null) {
-                           stream.close();
-                        }
-                        continue;
-                     }
-
-                     if (stream != null) {
-                        stream.close();
-                     }
+               if (!regionFile.hasChunk(chunkCoord)) {
+                  continue;
+               }
+               try (DataInputStream stream = regionFile.getChunkDataInputStream(chunkCoord)) {
+                  if (stream == null) {
                      continue;
                   }
-
-                  if (stream != null) {
-                     stream.close();
+                  CompoundTag chunkNBT = NbtIo.read(stream);
+                  if (!chunkNBT.isEmpty()) {
+                     chunkConsumer.accept(chunkNBT);
                   }
                }
             }
          }
-      } catch (Throwable var15) {
+      } catch (Throwable ignored) {
       }
-
    }
 
    private void processChunkNBT(CompoundTag chunkNBT, ScanSession session, Map<String, Integer> output) {
+      forEachChunkContainer(chunkNBT, (compound, isBlock) -> processEntityOrBlock(compound, session, output, isBlock));
+   }
+
+   private void processChunkNBTForPoll(CompoundTag chunkNBT, Map<String, Integer> output) {
+      forEachChunkContainer(chunkNBT, (compound, isBlock) -> processEntityOrBlockForPoll(compound, output));
+   }
+
+   private void forEachChunkContainer(CompoundTag chunkNBT, BiConsumer<CompoundTag, Boolean> consumer) {
       if (chunkNBT.contains("block_entities")) {
-         ListTag blockEntities = (ListTag)chunkNBT.get("block_entities");
+         ListTag blockEntities = (ListTag) chunkNBT.get("block_entities");
          if (blockEntities != null) {
-            for(Tag nbt : blockEntities) {
-               this.processEntityOrBlock((CompoundTag)nbt, session, output, true);
+            for (Tag nbt : blockEntities) {
+               consumer.accept((CompoundTag) nbt, true);
             }
          }
       }
-
       if (chunkNBT.contains("Entities")) {
-         ListTag entities = (ListTag)chunkNBT.get("Entities");
+         ListTag entities = (ListTag) chunkNBT.get("Entities");
          if (entities != null) {
-            for(Tag entity : entities) {
-               this.processEntityOrBlock((CompoundTag)entity, session, output, false);
+            for (Tag entity : entities) {
+               consumer.accept((CompoundTag) entity, false);
             }
          }
       }
-
    }
 
    private void processEntityOrBlock(CompoundTag compound, ScanSession session, Map<String, Integer> output, boolean isBlock) {
-      if (compound.contains("Items")) {
-         int localCount = 0;
-         ValueInput input = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), compound);
+      if (!compound.contains("Items")) {
+         return;
+      }
+      int localCount = 0;
+      ValueInput input = TagValueInput.create(ProblemReporter.DISCARDING, getProvider(), compound);
 
-         for(ItemStackWithSlot item : input.listOrEmpty("Items", ItemStackWithSlot.CODEC)) {
-            net.minecraft.world.item.ItemStack nms = item.stack();
-            if (!nms.isEmpty()) {
-               ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
-               if (bukkitStack.getType() != Material.AIR) {
-                  if (this.isMatch(session.model, bukkitStack)) {
-                     localCount += bukkitStack.getAmount();
-                  } else {
-                     int depth = this.checkDepth(bukkitStack, session.model);
-                     if (depth > 0) {
-                        localCount += depth;
-                     }
-                  }
-               }
-            }
+      for (ItemStackWithSlot item : input.listOrEmpty("Items", ItemStackWithSlot.CODEC)) {
+         net.minecraft.world.item.ItemStack nms = item.stack();
+         if (nms.isEmpty()) {
+            continue;
          }
-
-         if (localCount > 0) {
-            String id = compound.getStringOr("id", "");
-            StringBuilder key = new StringBuilder();
-            key.append(id).append(';');
-            if (isBlock) {
-               key.append(compound.getIntOr("x", 0)).append(';').append(compound.getIntOr("y", 0)).append(';').append(compound.getIntOr("z", 0));
-            } else {
-               ListTag pos = (ListTag)compound.get("Pos");
-               if (pos != null) {
-                  key.append(pos.getDouble(0).orElse(0.0)).append(';').append(pos.getDouble(1).orElse(0.0)).append(';').append(pos.getDouble(2).orElse(0.0));
-               } else {
-                  key.append("0.0;0.0;0.0");
-               }
-            }
-
-            output.put(key.toString(), localCount);
+         ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
+         if (bukkitStack.getType() == Material.AIR) {
+            continue;
          }
+         if (isMatch(session.model, bukkitStack)) {
+            localCount += bukkitStack.getAmount();
+         } else {
+            localCount += checkDepth(bukkitStack, session.model);
+         }
+      }
 
+      if (localCount > 0) {
+         output.put(formatContainerKey(compound, isBlock), localCount);
       }
    }
 
+   private String formatContainerKey(CompoundTag compound, boolean isBlock) {
+      String id = compound.getStringOr("id", "");
+      StringBuilder key = new StringBuilder().append(id).append(';');
+      if (isBlock) {
+         return key.append(compound.getIntOr("x", 0)).append(';')
+               .append(compound.getIntOr("y", 0)).append(';')
+               .append(compound.getIntOr("z", 0)).toString();
+      }
+      ListTag pos = (ListTag) compound.get("Pos");
+      if (pos != null) {
+         return key.append(pos.getDouble(0).orElse(0.0)).append(';')
+               .append(pos.getDouble(1).orElse(0.0)).append(';')
+               .append(pos.getDouble(2).orElse(0.0)).toString();
+      }
+      return key.append("0.0;0.0;0.0").toString();
+   }
+
+   @Override
    public void pollPlayerData(File file, Map<String, Integer> output) {
-      try {
-         CompoundTag dataCompound = NbtIo.readCompressed(file.getAbsoluteFile().toPath(), NbtAccounter.unlimitedHeap());
-         ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), dataCompound);
-
-         for(ItemStackWithSlot item : tagInput.listOrEmpty("Inventory", ItemStackWithSlot.CODEC)) {
-            net.minecraft.world.item.ItemStack nms = item.stack();
-            if (!nms.isEmpty()) {
-               ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
-               if (bukkitStack.getType() != Material.AIR) {
-                  String searchId = CapybaraScan.toSearchItemID(bukkitStack);
-                  output.merge(searchId, bukkitStack.getAmount(), Integer::sum);
-                  this.accumulateDeepItems(bukkitStack, output);
-               }
-            }
-         }
-      } catch (Throwable t) {
-         t.printStackTrace();
-      }
-
+      pollPlayerNbtList(file, "Inventory", output);
    }
 
+   @Override
    public void pollPlayerEnderData(File file, Map<String, Integer> output) {
+      pollPlayerNbtList(file, "EnderItems", output);
+   }
+
+   private void pollPlayerNbtList(File file, String listKey, Map<String, Integer> output) {
       try {
          CompoundTag dataCompound = NbtIo.readCompressed(file.getAbsoluteFile().toPath(), NbtAccounter.unlimitedHeap());
-         ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), dataCompound);
-
-         for(ItemStackWithSlot item : tagInput.listOrEmpty("EnderItems", ItemStackWithSlot.CODEC)) {
-            net.minecraft.world.item.ItemStack nms = item.stack();
-            if (!nms.isEmpty()) {
-               ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
-               if (bukkitStack.getType() != Material.AIR) {
-                  String searchId = CapybaraScan.toSearchItemID(bukkitStack);
-                  output.merge(searchId, bukkitStack.getAmount(), Integer::sum);
-                  this.accumulateDeepItems(bukkitStack, output);
-               }
-            }
+         ValueInput tagInput = TagValueInput.create(ProblemReporter.DISCARDING, getProvider(), dataCompound);
+         for (ItemStackWithSlot item : tagInput.listOrEmpty(listKey, ItemStackWithSlot.CODEC)) {
+            tallyNmsItem(item.stack(), output);
          }
       } catch (Throwable t) {
          t.printStackTrace();
       }
-
    }
 
+   @Override
    public void pollVaultFile(File file, Map<String, Integer> output) {
       try {
          String name = Bukkit.getOfflinePlayer(UUID.fromString(file.getName().replace(".yml", ""))).getName();
          FileConfiguration config = YamlConfiguration.loadConfiguration(file);
-         config.getKeys(false).forEach((key) -> {
+         for (String key : config.getKeys(false)) {
             ItemStack[] contents = CardboardBoxSerialization.fromStorage(config.getString(key, ""), name);
-            if (contents != null && contents.length >= 1) {
-               for(ItemStack item : contents) {
-                  if (item != null && item.getType() != Material.AIR) {
-                     String searchId = CapybaraScan.toSearchItemID(item);
-                     output.merge(searchId, item.getAmount(), Integer::sum);
-                     this.accumulateDeepItems(item, output);
-                  }
-               }
-
+            if (contents == null) {
+               continue;
             }
-         });
+            for (ItemStack item : contents) {
+               if (item != null && item.getType() != Material.AIR) {
+                  output.merge(CapybaraScan.toSearchItemID(item), item.getAmount(), Integer::sum);
+                  accumulateDeepItems(item, output);
+               }
+            }
+         }
       } catch (Exception err) {
          err.printStackTrace();
       }
-
-   }
-
-   public Map<String, Integer> pollWorld(String worldId, ScanProgress progress) {
-      Map<String, Integer> output = new ConcurrentHashMap<>();
-      File dir = Bukkit.getServer().getWorldContainer();
-      CraftWorld craftWorld = (CraftWorld)Bukkit.getWorld(worldId);
-      if (craftWorld == null) {
-         return output;
-      } else {
-         ServerLevel level = craftWorld.getHandle();
-         Path dimensionPath = level.levelStorageAccess.getDimensionPath(level.dimension());
-         File root = new File(dimensionPath.toAbsolutePath().toFile(), "region");
-         if (root.exists() && root.isDirectory()) {
-            File[] files = root.listFiles((d, n) -> n.endsWith(".mca"));
-            if (files != null && files.length != 0) {
-               ConcurrentLinkedQueue<File> fileQueue = new ConcurrentLinkedQueue<>(Arrays.asList(files));
-               progress.watch(output).total(files.length);
-               RegionStorageInfo info = new RegionStorageInfo(level.levelStorageAccess.getLevelId(), level.dimension(), "chunk");
-               Path rootPath = root.toPath();
-               int workerCount = Math.min(6, Runtime.getRuntime().availableProcessors());
-               List<CompletableFuture<Void>> futures = new ArrayList<>(workerCount);
-
-               for(int i = 0; i < workerCount; ++i) {
-                  futures.add(CapybaraScan.runAsync(() -> {
-                     Object storageInstance = null;
-
-                     try {
-                        storageInstance = REGION_STORAGE_CTOR.newInstance(info, rootPath, false);
-                        RegionFileStorage storage = (RegionFileStorage)storageInstance;
-
-                        File file;
-                        while((file = (File)fileQueue.poll()) != null) {
-                           this.processRegionFileForPoll(file, storage, output);
-                           progress.advance();
-                        }
-                     } catch (Exception var16) {
-                     } finally {
-                        if (storageInstance instanceof AutoCloseable) {
-                           try {
-                              ((AutoCloseable)storageInstance).close();
-                           } catch (Exception var15) {
-                           }
-                        }
-
-                     }
-
-                  }));
-               }
-
-               CompletableFuture.allOf((CompletableFuture[])futures.toArray(new CompletableFuture[0])).join();
-               return output;
-            } else {
-               return output;
-            }
-         } else {
-            return output;
-         }
-      }
-   }
-
-   private void processRegionFileForPoll(File file, RegionFileStorage storage, Map<String, Integer> output) {
-      try {
-         ChunkPos regionCoord = RegionFileStorage.getRegionFileCoordinates(file.toPath());
-         if (regionCoord == null) {
-            return;
-         }
-
-         RegionFile regionFile = (RegionFile)GET_REGION_FILE.invoke(storage, regionCoord, true);
-
-         for(int x = 0; x < 32; ++x) {
-            for(int z = 0; z < 32; ++z) {
-               ChunkPos chunkCoord = new ChunkPos((regionCoord.x << 5) + x, (regionCoord.z << 5) + z);
-               if (regionFile.hasChunk(chunkCoord)) {
-                  DataInputStream stream = regionFile.getChunkDataInputStream(chunkCoord);
-
-                  label64: {
-                     label63: {
-                        try {
-                           if (stream != null) {
-                              CompoundTag chunkNBT = NbtIo.read(stream);
-                              if (chunkNBT.isEmpty()) {
-                                 break label63;
-                              }
-
-                              this.processChunkNBTForPoll(chunkNBT, output);
-                              break label64;
-                           }
-                        } catch (Throwable var13) {
-                           if (stream != null) {
-                              try {
-                                 stream.close();
-                              } catch (Throwable var12) {
-                                 var13.addSuppressed(var12);
-                              }
-                           }
-
-                           throw var13;
-                        }
-
-                        if (stream != null) {
-                           stream.close();
-                        }
-                        continue;
-                     }
-
-                     if (stream != null) {
-                        stream.close();
-                     }
-                     continue;
-                  }
-
-                  if (stream != null) {
-                     stream.close();
-                  }
-               }
-            }
-         }
-      } catch (Throwable var14) {
-      }
-
-   }
-
-   private void processChunkNBTForPoll(CompoundTag chunkNBT, Map<String, Integer> output) {
-      if (chunkNBT.contains("block_entities")) {
-         ListTag blockEntities = (ListTag)chunkNBT.get("block_entities");
-         if (blockEntities != null) {
-            for(Tag nbt : blockEntities) {
-               this.processEntityOrBlockForPoll((CompoundTag)nbt, output);
-            }
-         }
-      }
-
-      if (chunkNBT.contains("Entities")) {
-         ListTag entities = (ListTag)chunkNBT.get("Entities");
-         if (entities != null) {
-            for(Tag entity : entities) {
-               this.processEntityOrBlockForPoll((CompoundTag)entity, output);
-            }
-         }
-      }
-
    }
 
    private void processEntityOrBlockForPoll(CompoundTag compound, Map<String, Integer> output) {
-      if (compound.contains("Items")) {
-         ValueInput input = TagValueInput.create(ProblemReporter.DISCARDING, this.getProvider(), compound);
-
-         for(ItemStackWithSlot item : input.listOrEmpty("Items", ItemStackWithSlot.CODEC)) {
-            net.minecraft.world.item.ItemStack nms = item.stack();
-            if (!nms.isEmpty()) {
-               ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
-               if (bukkitStack.getType() != Material.AIR) {
-                  String searchId = CapybaraScan.toSearchItemID(bukkitStack);
-                  output.merge(searchId, bukkitStack.getAmount(), Integer::sum);
-                  this.accumulateDeepItems(bukkitStack, output);
-               }
-            }
-         }
-
+      if (!compound.contains("Items")) {
+         return;
+      }
+      ValueInput input = TagValueInput.create(ProblemReporter.DISCARDING, getProvider(), compound);
+      for (ItemStackWithSlot item : input.listOrEmpty("Items", ItemStackWithSlot.CODEC)) {
+         tallyNmsItem(item.stack(), output);
       }
    }
 
-   static {
-      try {
-         REGION_STORAGE_CTOR = RegionFileStorage.class.getDeclaredConstructor(RegionStorageInfo.class, Path.class, Boolean.TYPE);
-         REGION_STORAGE_CTOR.setAccessible(true);
-         GET_REGION_FILE = RegionFileStorage.class.getDeclaredMethod("getRegionFile", ChunkPos.class, Boolean.TYPE);
-         GET_REGION_FILE.setAccessible(true);
-      } catch (Exception e) {
-         throw new RuntimeException("Failed to initialize NMS reflection for Capybara2108Folia", e);
+   private void tallyNmsItem(net.minecraft.world.item.ItemStack nms, Map<String, Integer> output) {
+      if (nms.isEmpty()) {
+         return;
       }
+      ItemStack bukkitStack = CraftItemStack.asBukkitCopy(nms);
+      if (bukkitStack.getType() == Material.AIR) {
+         return;
+      }
+      output.merge(CapybaraScan.toSearchItemID(bukkitStack), bukkitStack.getAmount(), Integer::sum);
+      accumulateDeepItems(bukkitStack, output);
    }
 
-   private class ScanSession {
+   private static class ScanSession {
+
       final ItemStack model;
       final net.minecraft.world.item.ItemStack nmsModel;
       final Item nmsItemType;
@@ -627,7 +423,7 @@ public class Capybara2111Folia implements CapybaraNative {
       ScanSession(ItemStack model) {
          this.model = model;
          this.nmsModel = CraftItemStack.asNMSCopy(model);
-         this.nmsItemType = this.nmsModel.getItem();
+         this.nmsItemType = nmsModel.getItem();
          this.modelMMOID = CapybaraScan.toMMOID(model);
       }
    }
