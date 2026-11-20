@@ -48,15 +48,17 @@ me.stella/
 │   ├── suggestion/               # SubCommandHandler, SuggestionProvider, Suggestions
 │   └── capybara/                 # /capybara root & sub-commands (grouped by domain)
 │       ├── CapybaraCommand.java  # Root dispatcher
-│       ├── StatusCommand.java    # Operational status / control
+│       ├── StatusCommand.java    # Operational status
+│       ├── CancelCommand.java    # Cooperative scan cancellation
 │       ├── PollCommand.java      # Full-region polling
-│       ├── Reports.java          # Report output adapter
-│       ├── scan/                 # Held-item & proximity scans (Inventory, Ender, Vault, Auction, World, Home, HeldItemScanCommand)
-│       └── nuke/                 # Container cleanup (NukeChunk, NukeContainer)
+│       ├── scan/                 # HeldItemScanCommand, WorldScanCommand, HomeScanCommand, AuctionScanCommand
+│       │   └── player/           # InventoryScanCommand, EnderScanCommand, VaultScanCommand
+│       └── nuke/                 # NukeChunkCommand, NukeContainerCommand
 │
-├── scan/                         # Async scan lifecycle & live progress
+├── scan/                         # Async scan lifecycle, Anvil/NBT streaming & live progress
 │   ├── model/                    # ScanJob, ScanSession, ScanProgress
-│   ├── engine/                   # ScanService, executors, Anvil/NBT readers & matchers
+│   ├── anvil/                    # AnvilRegionReader, StreamingNbtScanner, RawItem, RawItemMatcher
+│   ├── engine/                   # ScanExecutors, ScanService, WorldScanEngine, PlayerDataScanEngine
 │   └── monitor/                  # ScanMonitor, ScanRenderer
 │
 ├── duplication/                  # Real-time duplication detection
@@ -66,7 +68,7 @@ me.stella/
 │   └── alert/                    # SuspicionRecord, DiscordWebhook
 │
 ├── ui/                           # Adventure UI helpers (Theme, Messages, Format)
-└── utility/                      # Shared low-level utilities (CapybaraIO, MutableOptional)
+└── utility/                      # Shared low-level utilities (CapybaraIO, Reports, MutableOptional)
 ```
 
 > **Note:** Existing packages that currently exceed the 5-class threshold (`command/`, `command/capybara/`, `scan/`, `duplication/`) should be split along the branches above when touched by a structural refactor, and **no new classes** should be added flat into them.
