@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>me.stella</groupId>
+        <artifactId>capybara-parent</artifactId>
+        <version>2026.11</version>
+    </parent>
+
+    <artifactId>capybara-core</artifactId>
+    <name>Capybara :: core</name>
+    <description>Version-independent plugin code and the CapybaraNative contract implemented by the NMS modules.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.essentialsx</groupId>
+            <artifactId>EssentialsX</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.drtshock</groupId>
+            <artifactId>PlayerVaultsX</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>fr.maxlego08</groupId>
+            <artifactId>zAuctionHouseV3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.Indyuce</groupId>
+            <artifactId>MMOItems</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.lumine</groupId>
+            <artifactId>MythicLib</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>me.stella</groupId>
+    <artifactId>capybara-parent</artifactId>
+    <version>2026.11</version>
+    <packaging>pom</packaging>
+
+    <name>Capybara</name>
+    <description>Low-level item scanner and duplication detection</description>
+
+    <modules>
+        <!-- 1. cooks NMS binaries out of server distributions (libs/dist-server, bundles in libs/nms) -->
+        <module>cook-nms</module>
+        <!-- 2. version-independent plugin code + the CapybaraNative contract -->
+        <module>core</module>
+        <!-- 3. one module per NMS binary -->
+        <module>nms</module>
+        <!-- 4. global module: links core + every NMS module into the final plugin jar -->
+        <module>global</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>21</maven.compiler.release>
+
+        <!-- project layout (maven.multiModuleProjectDirectory is pinned by the .mvn/ directory) -->
+        <capybara.root>${maven.multiModuleProjectDirectory}</capybara.root>
+        <capybara.libs>${capybara.root}/libs</capybara.libs>
+        <capybara.compat>${capybara.libs}/compat</capybara.compat>
+        <capybara.nms.prebuilt>${capybara.libs}/nms</capybara.nms.prebuilt>
+        <capybara.nms.cooked>${capybara.root}/cook-nms/nms</capybara.nms.cooked>
+
+        <!-- APIs -->
+        <paper.api.version>1.21.4-R0.1-SNAPSHOT</paper.api.version>
+        <annotations.version>26.0.2</annotations.version>
+        <essentialsx.version>2.21.2</essentialsx.version>
+        <playervaults.jar>PlayerVaultsX.jar</playervaults.jar>
+        <zauctionhouse.jar>zAuctionHouse-3.2.4.5.jar</zauctionhouse.jar>
+        <mmoitems.jar>MMOItems-6.10.1-20260216.173633-48.jar</mmoitems.jar>
+        <mythiclib.jar>MythicLib-dist-1.7.1-20260223.224523-86.jar</mythiclib.jar>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>papermc</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <repository>
+            <id>minecraft-libraries</id>
+            <url>https://libraries.minecraft.net/</url>
+        </repository>
+        <repository>
+            <id>essentialsx</id>
+            <url>https://repo.essentialsx.net/releases/</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- project modules -->
+            <dependency>
+                <groupId>me.stella</groupId>
+                <artifactId>capybara-cook-nms</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>me.stella</groupId>
+                <artifactId>capybara-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- server API (version modules override paper.api.version) -->
+            <dependency>
+                <groupId>io.papermc.paper</groupId>
+                <artifactId>paper-api</artifactId>
+                <version>${paper.api.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains</groupId>
+                <artifactId>annotations</artifactId>
+                <version>${annotations.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- soft-depend plugin APIs -->
+            <dependency>
+                <groupId>net.essentialsx</groupId>
+                <artifactId>EssentialsX</artifactId>
+                <version>${essentialsx.version}</version>
+                <scope>provided</scope>
+                <exclusions>
+                    <exclusion>
+                        <groupId>*</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>com.drtshock</groupId>
+                <artifactId>PlayerVaultsX</artifactId>
+                <version>4.4.11</version>
+                <scope>system</scope>
+                <systemPath>${capybara.compat}/${playervaults.jar}</systemPath>
+            </dependency>
+            <!-- full plugin jar: Capybara needs fr.maxlego08.zauctionhouse.ZAuctionPlugin, which the public
+                 zAuctionHouseV3-API artifact does not contain -->
+            <dependency>
+                <groupId>fr.maxlego08</groupId>
+                <artifactId>zAuctionHouseV3</artifactId>
+                <version>3.2.4.5</version>
+                <scope>system</scope>
+                <systemPath>${capybara.compat}/${zauctionhouse.jar}</systemPath>
+            </dependency>
+            <dependency>
+                <groupId>net.Indyuce</groupId>
+                <artifactId>MMOItems</artifactId>
+                <version>6.10.1</version>
+                <scope>system</scope>
+                <systemPath>${capybara.compat}/${mmoitems.jar}</systemPath>
+            </dependency>
+            <dependency>
+                <groupId>io.lumine</groupId>
+                <artifactId>MythicLib</artifactId>
+                <version>1.7.1</version>
+                <scope>system</scope>
+                <systemPath>${capybara.compat}/${mythiclib.jar}</systemPath>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.14.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.3.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>3.5.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>3.5.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-toolchain</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <!-- NMS binaries are Java 21 class files; cooking needs a Java 21 runtime too -->
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>[3.6.3,)</version>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,9 @@
+target/
+.idea/
+*.iml
+# cook-nms: server instances and cooked NMS binaries (regenerate with mvn / java cook-nms/Cook.java)
+cook-nms/instances/
+cook-nms/nms/
+# external / internal plugin binaries (do not commit)
+libs/compat/
+

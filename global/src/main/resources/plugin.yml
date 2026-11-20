@@ -1,0 +1,40 @@
+name: Capybara
+version: '${project.version}'
+main: me.stella.Capybara
+softdepend:
+  - Essentials
+  - PlayerVaults
+  - MMOItems
+  - MythicLib
+  - zAuctionHouseV3
+authors:
+  - Crush_Seul
+  - StellarSeal_
+libraries:
+  - com.github.oshi:oshi-core:6.8.0
+  - org.jetbrains:annotations:26.0.2
+api-version: '1.21'
+description: Low-level item scanner and duplication detection
+folia-supported: true
+commands:
+  capybara:
+    usage: /<command> help
+    description: Capybara item scanner and duplication-detection tools
+    permission: capybara.admin
+permissions:
+  capybara.admin:
+    description: Access to /capybara and every Capybara tool
+    default: op
+    children:
+      capybara.scan: true
+      capybara.poll: true
+      capybara.nuke: true
+  capybara.scan:
+    description: Run held-item scans (inv, ec, vault, ah, world, home)
+    default: op
+  capybara.poll:
+    description: Run storage polls
+    default: op
+  capybara.nuke:
+    description: Empty containers (nuke-chunk, nuke-container)
+    default: op

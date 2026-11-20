@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>me.stella</groupId>
+        <artifactId>capybara-parent</artifactId>
+        <version>2026.11</version>
+    </parent>
+
+    <artifactId>capybara-nms</artifactId>
+    <packaging>pom</packaging>
+    <name>Capybara :: nms</name>
+    <description>
+        Parent of the version modules. Every module compiles exactly one me.stella.nativelib.Capybara&lt;key&gt;[Folia]
+        implementation against the NMS binary of its server version.
+    </description>
+
+    <modules>
+        <module>v1_21_4</module>        <!-- libs/nms/leaf-1.21.4.jar     -> Capybara2104      -->
+        <module>v1_21_8</module>        <!-- cook-nms/nms/leaf-1.21.8.jar -> Capybara2108      -->
+        <module>v1_21_11</module>       <!-- libs/nms/leaf-1.21.11.jar    -> Capybara2111      -->
+        <module>v1_21_11_folia</module> <!-- libs/nms/canvas-1.21.11.jar  -> Capybara2111Folia -->
+    </modules>
+
+    <dependencies>
+        <!-- build ordering: NMS binaries must be cooked before any version module compiles -->
+        <dependency>
+            <groupId>me.stella</groupId>
+            <artifactId>capybara-cook-nms</artifactId>
+            <type>pom</type>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>me.stella</groupId>
+            <artifactId>capybara-core</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.drtshock</groupId>
+            <artifactId>PlayerVaultsX</artifactId>
+        </dependency>
+    </dependencies>
+</project>

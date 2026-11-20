@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>me.stella</groupId>
+        <artifactId>capybara-nms</artifactId>
+        <version>2026.11</version>
+    </parent>
+
+    <artifactId>capybara-nms-1.21.4</artifactId>
+    <name>Capybara :: nms :: 1.21.4 (Leaf)</name>
+
+    <properties>
+        <paper.api.version>1.21.4-R0.1-SNAPSHOT</paper.api.version>
+    </properties>
+
+    <dependencies>
+        <!-- NMS binary: Leaf 1.21.4 (prebuilt) -->
+        <dependency>
+            <groupId>me.stella.capybara.nms</groupId>
+            <artifactId>leaf</artifactId>
+            <version>1.21.4</version>
+            <scope>system</scope>
+            <systemPath>${capybara.nms.prebuilt}/leaf-1.21.4.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.mojang</groupId>
+            <artifactId>datafixerupper</artifactId>
+            <version>8.0.16</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

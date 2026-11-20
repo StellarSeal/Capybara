@@ -1,0 +1,56 @@
+# Capybara Duplication Detection Configuration
+# This module monitors player inventories and containers for suspicious item duplication patterns
+
+duplication-detection:
+  # Enable or disable the duplication detection system
+  enabled: false
+
+  # Maximum depth for recursive container scanning (e.g., shulker boxes inside chests)
+  # Higher values allow deeper nesting but may impact performance
+  max-recursion-depth: 5
+
+  # Number of asynchronous worker threads for scanning operations
+  # Recommended: 2-4 threads depending on server capacity
+  async-workers: 2
+
+  # Discord webhook notifications for duplication alerts
+  discord-webhook:
+    # Enable or disable Discord webhook notifications
+    enabled: false
+    # Discord webhook URL (get this from your Discord server settings)
+    url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+    # Additional message to include in webhook (useful for pings like <@&role_id> or <@user_id>)
+    message: ""
+
+  # Item caps: Maximum allowed quantity per item type across all containers
+  # When a player exceeds these limits, a suspicion record is logged and staff are notified
+  # Seed formats (the same IDs emitted by Capybara item searches):
+  # - Vanilla: MATERIAL
+  # - MMOItems: MMOITEMS:TYPE:ID
+  # - ExcellentCrates: EXCELLENTCRATES:ID
+  # - CrazyVouchers: CRAZYVOUCHERS:ID
+  # Quote plugin seeds because they contain colons.
+  item-caps:
+    # Valuable blocks
+    DIAMOND_BLOCK: 256
+    NETHERITE_BLOCK: 256
+    EMERALD_BLOCK: 256
+    IRON_BLOCK: 512
+    GOLD_BLOCK: 512
+
+    # Special items
+    SPAWNER: 64
+    ELYTRA: 24
+    ENCHANTED_GOLDEN_APPLE: 256
+
+    # Plugin item examples:
+    # "MMOITEMS:SWORD:CUTLASS": 24
+    # "EXCELLENTCRATES:daily": 64
+    # "CRAZYVOUCHERS:rank_voucher": 16
+
+# Notes:
+# - Staff members with the permission "capybara.staff.dupe" will receive real-time alerts
+# - All suspicions are logged to files in the plugins/Capybara/logs/ directory
+# - Suspicion records include: player name, UUID, timestamp, item details, and location
+# - Adjust caps based on your server's economy and gameplay balance
+
