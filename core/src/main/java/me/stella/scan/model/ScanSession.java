@@ -3,70 +3,92 @@ package me.stella.scan.model;
 import java.io.File;
 import java.util.UUID;
 
-/** One running (or settled) scan: its job, owner, live progress and outcome. */
+/** One running or settled scan session: its job, owner, live progress and outcome. */
 public final class ScanSession {
 
-    public enum State { RUNNING, COMPLETED, FAILED }
+   public enum State {
 
-    private final int id;
-    private final UUID ownerId;
-    private final String ownerName;
-    private final ScanJob job;
-    private final ScanProgress progress = new ScanProgress();
-    private volatile State state = State.RUNNING;
-    private volatile File report;
-    private volatile Throwable failure;
+      RUNNING,
+      COMPLETED,
+      CANCELLED,
+      FAILED
+   }
 
-    public ScanSession(int id, UUID ownerId, String ownerName, ScanJob job) {
-        this.id = id;
-        this.ownerId = ownerId;
-        this.ownerName = ownerName;
-        this.job = job;
-    }
+   private final int id;
+   private final UUID ownerId;
+   private final String ownerName;
+   private final ScanJob job;
+   private final ScanProgress progress = new ScanProgress();
 
-    public void complete(File report) {
-        this.report = report;
-        this.state = State.COMPLETED;
-    }
+   private volatile State state = State.RUNNING;
+   private volatile File report;
+   private volatile Throwable failure;
 
-    public void fail(Throwable failure) {
-        this.failure = failure;
-        this.state = State.FAILED;
-    }
+   public ScanSession(int id, UUID ownerId, String ownerName, ScanJob job) {
+      this.id = id;
+      this.ownerId = ownerId;
+      this.ownerName = ownerName;
+      this.job = job;
+   }
 
-    public int id() {
-        return id;
-    }
+   public void complete(File report) {
+      if (state == State.RUNNING) {
+         this.report = report;
+         this.state = State.COMPLETED;
+      }
+   }
 
-    public UUID ownerId() {
-        return ownerId;
-    }
+   public void cancel() {
+      progress.cancel();
+      if (state == State.RUNNING) {
+         this.state = State.CANCELLED;
+      }
+   }
 
-    public String ownerName() {
-        return ownerName;
-    }
+   public void fail(Throwable failure) {
+      if (state == State.RUNNING) {
+         this.failure = failure;
+         this.state = State.FAILED;
+      }
+   }
 
-    public ScanJob job() {
-        return job;
-    }
+   public int id() {
+      return id;
+   }
 
-    public ScanProgress progress() {
-        return progress;
-    }
+   public UUID ownerId() {
+      return ownerId;
+   }
 
-    public State state() {
-        return state;
-    }
+   public String ownerName() {
+      return ownerName;
+   }
 
-    public boolean running() {
-        return state == State.RUNNING;
-    }
+   public ScanJob job() {
+      return job;
+   }
 
-    public File report() {
-        return report;
-    }
+   public ScanProgress progress() {
+      return progress;
+   }
 
-    public Throwable failure() {
-        return failure;
-    }
+   public State state() {
+      return state;
+   }
+
+   public boolean running() {
+      return state == State.RUNNING;
+   }
+
+   public boolean cancelled() {
+      return state == State.CANCELLED || progress.isCancelled();
+   }
+
+   public File report() {
+      return report;
+   }
+
+   public Throwable failure() {
+      return failure;
+   }
 }

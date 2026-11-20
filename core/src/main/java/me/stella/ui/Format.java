@@ -37,6 +37,32 @@ public final class Format {
                 : String.format(Locale.ROOT, "%.1fs", nanos / 1_000_000_000D);
     }
 
+    /** Parses compact durations such as {@code 30m}, {@code 24h}, {@code 7d}, {@code 2w} into seconds, or {@code -1}. */
+    public static long parseDurationSeconds(String input) {
+        if (input == null || input.length() < 2) {
+            return -1L;
+        }
+        String trimmed = input.trim().toLowerCase(Locale.ROOT);
+        char unit = trimmed.charAt(trimmed.length() - 1);
+        long multiplier = switch (unit) {
+            case 's' -> 1L;
+            case 'm' -> 60L;
+            case 'h' -> 3600L;
+            case 'd' -> 86400L;
+            case 'w' -> 604800L;
+            default -> -1L;
+        };
+        if (multiplier < 0L) {
+            return -1L;
+        }
+        try {
+            long value = Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
+            return value > 0L ? Math.multiplyExact(value, multiplier) : -1L;
+        } catch (NumberFormatException | ArithmeticException e) {
+            return -1L;
+        }
+    }
+
     /** Short, single-line description of a failure. */
     public static String failure(Throwable failure) {
         if (failure == null) {

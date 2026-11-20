@@ -1,10 +1,7 @@
 package me.stella;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import me.stella.scan.engine.ScanExecutors;
 import me.stella.utility.MutableOptional;
 import net.Indyuce.mmoitems.MMOItems;
 import net.Indyuce.mmoitems.api.Type;
@@ -23,20 +20,16 @@ public final class CapybaraScan {
    private static final NamespacedKey EXCELLENT_CRATES_ID = new NamespacedKey("excellentcrates", "crate_key.id");
    private static final NamespacedKey CRAZY_VOUCHERS_ID = new NamespacedKey("crazyvouchers", "crazyvouchers_voucher_item");
    private static final MutableOptional<CapybaraNative> SCANNER = MutableOptional.empty();
-   private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(
-         8, 8, 60L, TimeUnit.SECONDS,
-         new LinkedBlockingDeque<>(24576),
-         new ThreadFactoryBuilder().setPriority(5).setNameFormat("Capybara-Scanner-%d").setDaemon(true).build());
 
    private CapybaraScan() {
    }
 
    public static void process(Runnable task) {
-      EXECUTOR.execute(task);
+      ScanExecutors.runCoordinator(task);
    }
 
    public static CompletableFuture<Void> runAsync(Runnable task) {
-      return CompletableFuture.runAsync(task, EXECUTOR);
+      return ScanExecutors.runWorker(task);
    }
 
    public static CapybaraNative get() {
@@ -99,6 +92,6 @@ public final class CapybaraScan {
    }
 
    public static void shutdown() {
-      EXECUTOR.shutdownNow();
+      ScanExecutors.shutdown();
    }
 }

@@ -104,6 +104,21 @@ public final class Messages {
         return line("<bad><white><input></white> is not a valid number.", Placeholder.unparsed("input", input));
     }
 
+    public static Component invalidDuration(String input) {
+        return line("<bad><white><input></white> is not a valid duration. <muted>Examples: <white>30m, 24h, 7d",
+                Placeholder.unparsed("input", input));
+    }
+
+    public static Component noScanToCancel() {
+        return line("<muted>You have no running scan to cancel.");
+    }
+
+    public static Component scanCancelling(ScanSession session) {
+        return line("<highlight>Cancelling <primary><title></primary> <dim>#<id></dim><highlight>…",
+                Placeholder.unparsed("title", session.job().title()),
+                Placeholder.unparsed("id", String.valueOf(session.id())));
+    }
+
     public static Component unknownRegion(String region) {
         return line("<bad>Unknown region <white><region></white>. <muted>Valid: <white>inv, ec, vault, ah, world",
                 Placeholder.unparsed("region", region));
@@ -132,6 +147,15 @@ public final class Messages {
     public static Component scanSettled(ScanSession session) {
         ScanJob job = session.job();
         ScanProgress.Snapshot snapshot = session.progress().snapshot();
+        if (session.state() == ScanSession.State.CANCELLED) {
+            return line("<highlight>■ <title> cancelled</highlight> <muted>after <white><time></white> "
+                            + "(<done>/<total> <unit>)",
+                    Placeholder.unparsed("title", job.title()),
+                    Placeholder.unparsed("time", Format.seconds(snapshot.elapsedNanos())),
+                    Placeholder.unparsed("done", Format.count(snapshot.done())),
+                    Placeholder.unparsed("total", Format.count(snapshot.total())),
+                    Placeholder.unparsed("unit", job.unit()));
+        }
         if (session.state() == ScanSession.State.FAILED) {
             return line("<bad>✖ <title> failed after <time>: <white><error></white><newline>"
                             + "<dim>   ↳ </dim><muted>The full stack trace is in the console.",
@@ -142,7 +166,11 @@ public final class Messages {
         File report = session.report();
         String shown = report == null ? "-" : relative(report);
         String path = report == null ? "" : report.getAbsolutePath();
-        return line("<good>✔ <title> complete</good> <muted>in <white><time></white> - </muted><counter><newline>"
+        String errorSuffix = snapshot.errors() > 0L
+                ? " <dim>·</dim> <highlight>" + Format.count(snapshot.errors()) + " skipped</highlight>"
+                : "";
+        return line("<good>✔ <title> complete</good> <muted>in <white><time></white> - </muted><counter>"
+                        + errorSuffix + "<newline>"
                         + "<dim>   ↳ </dim><muted>Report: <copy><hover:show_text:'<muted><path><newline>"
                         + "<accent>Click to copy the path'><white><underlined><report></underlined></white></hover></copy>",
                 Placeholder.unparsed("title", job.title()),

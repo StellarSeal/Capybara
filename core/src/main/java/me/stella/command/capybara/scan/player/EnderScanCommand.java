@@ -1,6 +1,6 @@
 package me.stella.command.capybara.scan.player;
 
-import me.stella.command.capybara.Reports;
+import me.stella.utility.Reports;
 import me.stella.command.capybara.scan.HeldItemScanCommand;
 import me.stella.scan.model.ScanJob;
 

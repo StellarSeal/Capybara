@@ -13,11 +13,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import me.stella.CapybaraScan;
 import me.stella.duplication.alert.DiscordWebhook;
 import me.stella.duplication.alert.SuspicionRecord;
 import me.stella.duplication.config.DuplicationDetectionConfig;
 import me.stella.duplication.snapshot.InventorySnapshot;
+import me.stella.scan.engine.ScanExecutors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -31,6 +31,7 @@ public class DuplicationDetectionModule {
 
    private static final DateTimeFormatter LOG_FILE_DATE_FORMAT = DateTimeFormatter.ofPattern("dd-MM-yyyy");
    private static final String STAFF_NOTIFICATION_PERMISSION = "capybara.staff.dupe";
+   private static final int MAX_HISTORY_SIZE = 1000;
    private static final Map<String, Boolean> PERMISSION_CACHE = new ConcurrentHashMap<>();
 
    private final DuplicationDetectionConfig config;
@@ -68,6 +69,7 @@ public class DuplicationDetectionModule {
             e.printStackTrace();
          }
       }
+      ScanExecutors.configureDuplicationWorkers(config.maxWorkers());
       initialized = true;
       Bukkit.getConsoleSender().sendMessage(
             "[DuplicationDetection] Module initialized - Enabled: " + config.enabled()
@@ -100,30 +102,36 @@ public class DuplicationDetectionModule {
          return;
       }
       suspicionLog.addLast(record);
+      while (suspicionLog.size() > MAX_HISTORY_SIZE) {
+         suspicionLog.pollFirst();
+      }
       Bukkit.getConsoleSender().sendMessage(record.toString());
 
       boolean notStaff = !PERMISSION_CACHE.getOrDefault(record.getPlayerName(), false);
       if (notStaff) {
          notifyStaff(record);
       }
-      if (discordWebhook != null && config.discordWebhookEnabled() && notStaff) {
-         try {
-            discordWebhook.sendDuplicationAlert(record, config.discordWebhookMessage());
-         } catch (Exception e) {
-            System.err.println("[DuplicationDetection] Failed to send Discord webhook");
-            e.printStackTrace();
-         }
-      }
 
-      File logFile = getCurrentLogFile();
-      if (logFile != null) {
-         try (FileWriter writer = new FileWriter(logFile, true)) {
-            writer.append(record.toString()).append('\n');
-         } catch (IOException e) {
-            System.err.println("[DuplicationDetection] Failed to write suspicion log");
-            e.printStackTrace();
+      // Offload blocking HTTP webhook and log file writes to the serialized I/O thread.
+      ScanExecutors.runDuplicationIo(() -> {
+         if (discordWebhook != null && config.discordWebhookEnabled() && notStaff) {
+            try {
+               discordWebhook.sendDuplicationAlert(record, config.discordWebhookMessage());
+            } catch (Exception e) {
+               System.err.println("[DuplicationDetection] Failed to send Discord webhook");
+               e.printStackTrace();
+            }
          }
-      }
+         File logFile = getCurrentLogFile();
+         if (logFile != null) {
+            try (FileWriter writer = new FileWriter(logFile, true)) {
+               writer.append(record.toString()).append('\n');
+            } catch (IOException e) {
+               System.err.println("[DuplicationDetection] Failed to write suspicion log");
+               e.printStackTrace();
+            }
+         }
+      });
    }
 
    private void notifyStaff(SuspicionRecord record) {
@@ -169,7 +177,7 @@ public class DuplicationDetectionModule {
 
    public void scanInventory(InventorySnapshot snapshot) {
       if (config.enabled()) {
-         CapybaraScan.process(new DuplicationScanTask(snapshot, config, this));
+         ScanExecutors.runDuplication(new DuplicationScanTask(snapshot, config, this));
       }
    }
 

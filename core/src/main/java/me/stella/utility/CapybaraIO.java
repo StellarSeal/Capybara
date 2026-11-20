@@ -10,12 +10,14 @@ import java.util.Map;
 
 public final class CapybaraIO {
 
+   private static final int BUFFER_BYTES = 64 * 1024;
+
    private CapybaraIO() {
    }
 
    public static void write(String seed, File out, List<Map.Entry<String, Integer>> data) {
       NumberFormat format = NumberFormat.getInstance();
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out), BUFFER_BYTES)) {
          writer.write("Seed:" + seed);
          writer.newLine();
          writer.newLine();
@@ -31,7 +33,7 @@ public final class CapybaraIO {
 
    public static void write(String seed, File out, List<Map.Entry<String, Double>> data, boolean useDouble) {
       NumberFormat format = NumberFormat.getInstance();
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out), BUFFER_BYTES)) {
          writer.write("Seed:" + seed);
          writer.newLine();
          writer.newLine();
@@ -45,9 +47,9 @@ public final class CapybaraIO {
       }
    }
 
-   public static void writePoll(String header, File out, List<Map.Entry<String, Integer>> data) {
+   public static void writePoll(String header, File out, List<Map.Entry<String, Long>> data) {
       NumberFormat format = NumberFormat.getInstance();
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out), BUFFER_BYTES)) {
          writer.write("Poll Type: " + header);
          writer.newLine();
          writer.write("Timestamp: " + System.currentTimeMillis());
@@ -57,7 +59,7 @@ public final class CapybaraIO {
          writer.newLine();
          writer.write("=".repeat(50));
          writer.newLine();
-         for (Map.Entry<String, Integer> entry : data) {
+         for (Map.Entry<String, Long> entry : data) {
             writer.write(entry.getKey() + " -> " + format.format(entry.getValue()));
             writer.newLine();
          }

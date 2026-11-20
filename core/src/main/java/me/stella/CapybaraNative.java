@@ -7,19 +7,26 @@ import fr.maxlego08.zauctionhouse.ZAuctionPlugin;
 import fr.maxlego08.zauctionhouse.api.AuctionItem;
 import fr.maxlego08.zauctionhouse.api.enums.StorageType;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import me.stella.scan.engine.PlayerDataScanEngine;
+import me.stella.scan.engine.ScanExecutors;
+import me.stella.scan.engine.WorldScanEngine;
 import me.stella.scan.model.ScanProgress;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.ShulkerBox;
 import org.bukkit.configuration.ConfigurationSection;
@@ -34,44 +41,65 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Version-specific scanner contract, implemented once per NMS module ({@code me.stella.nativelib.Capybara<key>}).
+ * Version-specific scanner contract implemented once per NMS module ({@code me.stella.nativelib.Capybara<key>}).
  *
- * <p>Every scan reports into a {@link ScanProgress}: it declares a total of work units, advances once per unit and
- * exposes its live output so the {@link me.stella.scan.monitor.ScanMonitor} can render it.</p>
+ * <p>Heavy storage scanning (Anvil {@code .mca}/{@code .mcc} reading, streaming binary NBT parsing,
+ * playerdata scanning, and isolated worker scheduling) lives in {@code core} so every supported MC
+ * version shares the same zero-DOM hot path. NMS adapters only provide dimension-path resolution and
+ * exact item deserialization fallback.</p>
  */
 public interface CapybaraNative {
 
    boolean isMatch(ItemStack model, ItemStack entry);
 
-   /** Player inventories; unit = player data file. */
-   Map<String, Integer> inventory(ItemStack target, ScanProgress progress);
+   /** Resolves the on-disk dimension root containing {@code region/} and {@code entities/}. */
+   Path dimensionPath(World world);
 
-   /** Player ender chests; unit = player data file. */
-   Map<String, Integer> ender(ItemStack target, ScanProgress progress);
+   /** Exact NMS fallback matcher for non-basic vanilla items whose raw NBT {@code id} matched the target. */
+   boolean matchesRawItemNbt(byte[] namedRootCompound, ItemStack model);
 
-   /** Containers and entities of a world; unit = region file. */
-   Map<String, Integer> world(ItemStack target, String world, ScanProgress progress);
+   default Map<String, Integer> inventory(ItemStack target, ScanProgress progress) {
+      return PlayerDataScanEngine.scan(this, target, false, progress);
+   }
 
-   /** Tally of every item in a world; unit = region file. */
-   Map<String, Integer> pollWorld(String world, ScanProgress progress);
+   default Map<String, Integer> ender(ItemStack target, ScanProgress progress) {
+      return PlayerDataScanEngine.scan(this, target, true, progress);
+   }
 
-   void pollPlayerData(File file, Map<String, Integer> output);
+   default Map<String, Integer> world(ItemStack target, String world, ScanProgress progress) {
+      return WorldScanEngine.scanWorld(this, target, world, progress);
+   }
 
-   void pollPlayerEnderData(File file, Map<String, Integer> output);
+   default Map<String, Integer> world(ItemStack target, String world, long minTimestampSec, ScanProgress progress) {
+      return WorldScanEngine.scanWorld(this, target, world, minTimestampSec, progress);
+   }
 
-   void pollVaultFile(File file, Map<String, Integer> output);
+   default Map<String, Long> pollInventory(ScanProgress progress) {
+      return PlayerDataScanEngine.poll(false, progress);
+   }
 
-   /** {@code <main world>/playerdata/*.dat}; empty if the folder is missing. */
+   default Map<String, Long> pollEnderChest(ScanProgress progress) {
+      return PlayerDataScanEngine.poll(true, progress);
+   }
+
+   default Map<String, Long> pollWorld(String world, ScanProgress progress) {
+      return WorldScanEngine.pollWorld(this, world, progress);
+   }
+
+   default Map<String, Long> pollWorld(String world, long minTimestampSec, ScanProgress progress) {
+      return WorldScanEngine.pollWorld(this, world, minTimestampSec, progress);
+   }
+
    static File[] playerDataFiles() {
       File folder = new File(Bukkit.getServer().getWorldContainer(), Bukkit.getWorlds().get(0).getName() + "/playerdata");
       File[] files = folder.listFiles((dir, name) -> name.endsWith(".dat"));
       return files == null ? new File[0] : Arrays.stream(files).filter(File::isFile).toArray(File[]::new);
    }
 
-   /** Closest Essentials home / last / logout location within {@code radii}; unit = userdata file. */
    default Map<String, Double> scanHouse(Location point, double radii, ScanProgress progress) {
       Map<String, Double> output = new ConcurrentHashMap<>();
-      progress.watch(output::size, null);
+      progress.trackAtomic(false);
+
       Essentials essentials;
       try {
          essentials = (Essentials) Bukkit.getPluginManager().getPlugin("Essentials");
@@ -81,6 +109,7 @@ public interface CapybaraNative {
       if (essentials == null) {
          return output;
       }
+
       File userdataDir = new File(essentials.getDataFolder(), "userdata");
       if (!userdataDir.isDirectory()) {
          return output;
@@ -89,12 +118,16 @@ public interface CapybaraNative {
       if (userFiles == null || userFiles.length == 0) {
          return output;
       }
+
       progress.total(userFiles.length);
       UUID pointWorldId = point.getWorld() != null ? point.getWorld().getUID() : null;
       double closestDistance = Double.MAX_VALUE;
       String closestKey = null;
 
       for (File userFile : userFiles) {
+         if (progress.isCancelled()) {
+            break;
+         }
          try {
             UUID uuid;
             try {
@@ -128,18 +161,18 @@ public interface CapybaraNative {
                }
             }
          } catch (Exception err) {
-            err.printStackTrace();
+            progress.recordError();
          } finally {
             progress.advance();
          }
       }
       if (closestKey != null) {
          output.put(closestKey, closestDistance);
+         progress.recordMatch(1L, 0L);
       }
       return output;
    }
 
-   /** Distance from {@code point} to a saved Essentials location, or {@code +Infinity} if absent / other world. */
    private static double distanceTo(ConfigurationSection location, Location point, UUID pointWorldId) {
       if (location == null) {
          return Double.POSITIVE_INFINITY;
@@ -170,18 +203,30 @@ public interface CapybaraNative {
       return scanHouse(point, radii, progress);
    }
 
-   /** Bundles and shulker boxes can hold further items. */
    default boolean isDeep(ItemStack itemStack) {
+      if (itemStack == null || !itemStack.hasItemMeta()) {
+         return false;
+      }
       ItemMeta meta = itemStack.getItemMeta();
       return meta instanceof BundleMeta
-              || meta instanceof BlockStateMeta blockStateMeta && blockStateMeta.getBlockState() instanceof ShulkerBox;
+            || meta instanceof BlockStateMeta blockStateMeta && blockStateMeta.getBlockState() instanceof ShulkerBox;
    }
 
    default boolean isBasic(ItemStack itemStack) {
-      return !Objects.requireNonNull(itemStack.getItemMeta()).hasLore();
+      if (itemStack == null || !itemStack.hasItemMeta()) {
+         return true;
+      }
+      ItemMeta meta = itemStack.getItemMeta();
+      if (meta == null) {
+         return true;
+      }
+      return !meta.hasLore()
+            && !meta.hasDisplayName()
+            && !meta.hasEnchants()
+            && !meta.hasCustomModelData()
+            && meta.getPersistentDataContainer().getKeys().isEmpty();
    }
 
-   /** Number of {@code target} items nested (recursively) inside {@code itemStack}. */
    default int checkDepth(ItemStack itemStack, ItemStack target) {
       if (itemStack == null || itemStack.getType() == Material.AIR || !isDeep(itemStack)) {
          return 0;
@@ -211,48 +256,69 @@ public interface CapybaraNative {
       return List.of();
    }
 
-   /** PlayerVaults vaults; unit = vault file. Result: player -> ("player;vault" -> count). */
    default Map<String, Map<String, Integer>> vault(ItemStack target, ScanProgress progress) {
       File vaultData = JavaPlugin.getPlugin(PlayerVaults.class).getVaultData();
-      List<File> dataStream = Arrays.stream(Objects.requireNonNull(vaultData.listFiles()))
-              .filter(f -> f.isFile() && f.getName().endsWith(".yml")).toList();
+      File[] rawFiles = vaultData.listFiles((dir, name) -> name.endsWith(".yml"));
+      if (rawFiles == null || rawFiles.length == 0) {
+         return new ConcurrentHashMap<>();
+      }
+      List<File> files = Arrays.stream(rawFiles).filter(File::isFile).toList();
       Map<String, Map<String, Integer>> output = new ConcurrentHashMap<>();
-      progress.total(dataStream.size()).watch(
-              () -> output.values().stream().filter(pool -> !pool.isEmpty()).count(),
-              () -> output.values().stream().flatMap(pool -> pool.values().stream()).mapToLong(Integer::longValue).sum());
-      dataStream.forEach(file -> {
-         try {
-            String name = Bukkit.getOfflinePlayer(UUID.fromString(file.getName().replace(".yml", ""))).getName();
-            FileConfiguration config = YamlConfiguration.loadConfiguration(file);
-            AtomicInteger totalAccount = new AtomicInteger(0);
-            Map<String, Integer> pool = output.computeIfAbsent(name, n -> new ConcurrentHashMap<>());
-            config.getKeys(false).forEach(key -> {
-               ItemStack[] contents = CardboardBoxSerialization.fromStorage(config.getString(key, ""), name);
-               if (contents != null) {
-                  for (ItemStack item : contents) {
-                     if (item.getType() != Material.AIR && isMatch(target, item)) {
-                        pool.merge(name + ";" + key, item.getAmount(), Integer::sum);
-                        totalAccount.getAndAdd(item.getAmount());
+      progress.trackAtomic(true).total(files.size());
+
+      AtomicInteger nextIndex = new AtomicInteger();
+      int workers = Math.min(ScanExecutors.workerCount(), files.size());
+      List<CompletableFuture<Void>> futures = new ArrayList<>(workers);
+
+      for (int i = 0; i < workers; i++) {
+         futures.add(ScanExecutors.runWorker(() -> {
+            int idx;
+            while (!progress.isCancelled() && (idx = nextIndex.getAndIncrement()) < files.size()) {
+               File file = files.get(idx);
+               try {
+                  String name = Bukkit.getOfflinePlayer(UUID.fromString(file.getName().replace(".yml", ""))).getName();
+                  if (name == null) {
+                     continue;
+                  }
+                  FileConfiguration config = YamlConfiguration.loadConfiguration(file);
+                  Map<String, Integer> pool = new HashMap<>();
+                  int totalAccount = 0;
+                  for (String key : config.getKeys(false)) {
+                     ItemStack[] contents = CardboardBoxSerialization.fromStorage(config.getString(key, ""), name);
+                     if (contents == null) {
+                        continue;
+                     }
+                     for (ItemStack item : contents) {
+                        if (item == null || item.getType() == Material.AIR) {
+                           continue;
+                        }
+                        int found = isMatch(target, item) ? item.getAmount() : checkDepth(item, target);
+                        if (found > 0) {
+                           pool.merge(name + ";" + key, found, Integer::sum);
+                           totalAccount += found;
+                        }
                      }
                   }
+                  if (totalAccount > 0) {
+                     output.put(name, pool);
+                     progress.recordMatch(1L, totalAccount);
+                  }
+               } catch (Exception err) {
+                  progress.recordError();
+               } finally {
+                  progress.advance();
                }
-            });
-            if (totalAccount.get() > 0) {
-               output.put(name, pool);
             }
-         } catch (Exception err) {
-            err.printStackTrace();
-         } finally {
-            progress.advance();
-         }
-      });
+         }));
+      }
+
+      CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
       return output;
    }
 
-   /** zAuctionHouse listings, expired and purchased items; unit = auction entry. */
    default Map<String, Integer> auctionHouse(ItemStack target, ScanProgress progress) {
       Map<String, Integer> output = new ConcurrentHashMap<>();
-      progress.watch(output);
+      progress.trackAtomic(true);
       ZAuctionPlugin auctionPlugin = readyAuctionPlugin();
       if (auctionPlugin != null) {
          scanAuctionBucket(target, auctionPlugin, StorageType.STORAGE, "selling", false, output, progress);
@@ -293,8 +359,11 @@ public interface CapybaraNative {
    }
 
    private void scanAuctionBucket(ItemStack target, ZAuctionPlugin plugin, StorageType storageType, String state,
-                                  boolean linkBuyer, Map<String, Integer> output, ScanProgress progress) {
+         boolean linkBuyer, Map<String, Integer> output, ScanProgress progress) {
       for (AuctionItem auctionItem : auctionBucket(plugin, storageType, progress)) {
+         if (progress.isCancelled()) {
+            return;
+         }
          try {
             if (auctionItem == null) {
                continue;
@@ -307,7 +376,9 @@ public interface CapybaraNative {
             if (ownerId != null) {
                String ownerName = linkBuyer ? Bukkit.getOfflinePlayer(ownerId).getName() : auctionItem.getSellerName();
                String owner = ownerName == null ? ownerId.toString() : ownerName;
-               output.merge(owner + ";" + state, count, Integer::sum);
+               String key = owner + ";" + state;
+               Integer merged = output.merge(key, count, Integer::sum);
+               progress.recordMatch(merged == count ? 1L : 0L, count);
             }
          } finally {
             progress.advance();
@@ -325,59 +396,67 @@ public interface CapybaraNative {
       return total;
    }
 
-   /** Tally of every inventory item; unit = player data file. */
-   default Map<String, Integer> pollInventory(ScanProgress progress) {
-      return pollPlayerFiles(progress, this::pollPlayerData);
-   }
-
-   /** Tally of every ender chest item; unit = player data file. */
-   default Map<String, Integer> pollEnderChest(ScanProgress progress) {
-      return pollPlayerFiles(progress, this::pollPlayerEnderData);
-   }
-
-   private Map<String, Integer> pollPlayerFiles(ScanProgress progress, FilePoller poller) {
-      Map<String, Integer> output = new ConcurrentHashMap<>();
-      File[] files = playerDataFiles();
-      progress.total(files.length).watch(output);
-      for (File file : files) {
-         try {
-            poller.poll(file, output);
-         } catch (Exception err) {
-            err.printStackTrace();
-         } finally {
-            progress.advance();
-         }
-      }
-      return output;
-   }
-
-   /** Tally of every vault item; unit = vault file. */
-   default Map<String, Integer> pollVault(ScanProgress progress) {
-      Map<String, Integer> output = new ConcurrentHashMap<>();
-      progress.watch(output);
+   default Map<String, Long> pollVault(ScanProgress progress) {
+      Map<String, Long> output = new ConcurrentHashMap<>();
+      progress.trackAtomic(true);
       if (!CapybaraScan.supportPlayerVaults()) {
          return output;
       }
       File vaultData = JavaPlugin.getPlugin(PlayerVaults.class).getVaultData();
-      List<File> dataStream = Arrays.stream(Objects.requireNonNull(vaultData.listFiles()))
-              .filter(f -> f.isFile() && f.getName().endsWith(".yml")).toList();
-      progress.total(dataStream.size());
-      dataStream.forEach(file -> {
-         try {
-            pollVaultFile(file, output);
-         } catch (Exception err) {
-            err.printStackTrace();
-         } finally {
-            progress.advance();
-         }
-      });
+      File[] rawFiles = vaultData.listFiles((dir, name) -> name.endsWith(".yml"));
+      if (rawFiles == null || rawFiles.length == 0) {
+         return output;
+      }
+      List<File> files = Arrays.stream(rawFiles).filter(File::isFile).toList();
+      progress.total(files.size());
+
+      AtomicInteger nextIndex = new AtomicInteger();
+      int workers = Math.min(ScanExecutors.workerCount(), files.size());
+      List<CompletableFuture<Void>> futures = new ArrayList<>(workers);
+
+      for (int i = 0; i < workers; i++) {
+         futures.add(ScanExecutors.runWorker(() -> {
+            int idx;
+            while (!progress.isCancelled() && (idx = nextIndex.getAndIncrement()) < files.size()) {
+               File file = files.get(idx);
+               try {
+                  pollVaultFile(file, output, progress);
+               } catch (Exception err) {
+                  progress.recordError();
+               } finally {
+                  progress.advance();
+               }
+            }
+         }));
+      }
+
+      CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
       return output;
    }
 
-   /** Tally of every auction item; unit = auction entry. */
-   default Map<String, Integer> pollAuctionHouse(ScanProgress progress) {
-      Map<String, Integer> output = new ConcurrentHashMap<>();
-      progress.watch(output);
+   private void pollVaultFile(File file, Map<String, Long> output, ScanProgress progress) {
+      String name = Bukkit.getOfflinePlayer(UUID.fromString(file.getName().replace(".yml", ""))).getName();
+      if (name == null) {
+         return;
+      }
+      FileConfiguration config = YamlConfiguration.loadConfiguration(file);
+      for (String key : config.getKeys(false)) {
+         ItemStack[] contents = CardboardBoxSerialization.fromStorage(config.getString(key, ""), name);
+         if (contents == null) {
+            continue;
+         }
+         for (ItemStack item : contents) {
+            if (item != null && item.getType() != Material.AIR) {
+               recordTalliedItem(item, output, progress);
+               accumulateDeepItems(item, output, progress);
+            }
+         }
+      }
+   }
+
+   default Map<String, Long> pollAuctionHouse(ScanProgress progress) {
+      Map<String, Long> output = new ConcurrentHashMap<>();
+      progress.trackAtomic(true);
       ZAuctionPlugin auctionPlugin = readyAuctionPlugin();
       if (auctionPlugin != null) {
          pollAuctionBucket(auctionPlugin, StorageType.STORAGE, output, progress);
@@ -387,17 +466,20 @@ public interface CapybaraNative {
       return output;
    }
 
-   default void pollAuctionBucket(ZAuctionPlugin plugin, StorageType storageType, Map<String, Integer> output,
-                                  ScanProgress progress) {
+   private void pollAuctionBucket(ZAuctionPlugin plugin, StorageType storageType, Map<String, Long> output,
+         ScanProgress progress) {
       for (AuctionItem auctionItem : auctionBucket(plugin, storageType, progress)) {
+         if (progress.isCancelled()) {
+            return;
+         }
          try {
             if (auctionItem == null) {
                continue;
             }
             for (ItemStack itemStack : auctionContents(auctionItem)) {
                if (itemStack != null && itemStack.getType() != Material.AIR) {
-                  output.merge(CapybaraScan.toSearchItemID(itemStack), itemStack.getAmount(), Integer::sum);
-                  accumulateDeepItems(itemStack, output);
+                  recordTalliedItem(itemStack, output, progress);
+                  accumulateDeepItems(itemStack, output, progress);
                }
             }
          } finally {
@@ -406,8 +488,14 @@ public interface CapybaraNative {
       }
    }
 
-   /** Adds every item nested (recursively) inside {@code itemStack} to the tally. */
-   default void accumulateDeepItems(ItemStack itemStack, Map<String, Integer> output) {
+   private void recordTalliedItem(ItemStack item, Map<String, Long> output, ScanProgress progress) {
+      String searchId = CapybaraScan.toSearchItemID(item);
+      long amount = item.getAmount();
+      Long merged = output.merge(searchId, amount, Long::sum);
+      progress.recordMatch(merged == amount ? 1L : 0L, amount);
+   }
+
+   private void accumulateDeepItems(ItemStack itemStack, Map<String, Long> output, ScanProgress progress) {
       if (itemStack == null || itemStack.getType() == Material.AIR || !isDeep(itemStack)) {
          return;
       }
@@ -417,14 +505,9 @@ public interface CapybaraNative {
       }
       for (ItemStack item : nestedItems(meta)) {
          if (item != null && item.getType() != Material.AIR) {
-            output.merge(CapybaraScan.toSearchItemID(item), item.getAmount(), Integer::sum);
-            accumulateDeepItems(item, output);
+            recordTalliedItem(item, output, progress);
+            accumulateDeepItems(item, output, progress);
          }
       }
-   }
-
-   @FunctionalInterface
-   interface FilePoller {
-      void poll(File file, Map<String, Integer> output);
    }
 }

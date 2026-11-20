@@ -1,6 +1,6 @@
 package me.stella.command.capybara.scan;
 
-import me.stella.command.capybara.Reports;
+import me.stella.utility.Reports;
 import me.stella.command.suggestion.*;
 import me.stella.scan.model.ScanJob;
 

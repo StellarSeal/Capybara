@@ -46,7 +46,6 @@ public final class Capybara extends JavaPlugin {
       commands = new CommandDiscovery(this);
       commands.discoverAndRegister("me.stella.command");
       initializeDuplicationDetection();
-      System.gc();
    }
 
    private void bindNativeLayer() {

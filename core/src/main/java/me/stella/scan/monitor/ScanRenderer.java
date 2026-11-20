@@ -56,6 +56,15 @@ public final class ScanRenderer {
     public static Component settled(ScanSession session) {
         ScanJob job = session.job();
         ScanProgress.Snapshot snapshot = session.progress().snapshot();
+        if (session.state() == ScanSession.State.CANCELLED) {
+            return Component.text()
+                    .append(Component.text("■ ", Theme.HIGHLIGHT))
+                    .append(Component.text(job.title() + " cancelled", Theme.HIGHLIGHT, TextDecoration.BOLD))
+                    .append(SEPARATOR)
+                    .append(Component.text(Format.count(snapshot.done()) + "/" + Format.count(snapshot.total())
+                            + " " + job.unit(), Theme.MUTED))
+                    .build();
+        }
         if (session.state() == ScanSession.State.FAILED) {
             return Component.text()
                     .append(Component.text("✖ ", Theme.BAD))

@@ -15,6 +15,7 @@ public record ScanJob(String title, String subject, String unit, Counter counter
 
     /** Labels for the live output counter ({@code entries} = output keys, {@code amount} = summed values). */
     public record Counter(String entries, String amount) {
+
         public static final Counter HOLDERS = new Counter("holders", "items");
         public static final Counter OWNERS = new Counter("owners", "items");
         public static final Counter CONTAINERS = new Counter("containers", "items");
@@ -24,6 +25,7 @@ public record ScanJob(String title, String subject, String unit, Counter counter
 
     @FunctionalInterface
     public interface Work {
+
         File run(ScanProgress progress) throws Exception;
 
         /** Collects data while reporting progress, switches to the "writing" phase, then persists the report. */
@@ -38,11 +40,13 @@ public record ScanJob(String title, String subject, String unit, Counter counter
 
     @FunctionalInterface
     public interface Collector<T> {
+
         T collect(ScanProgress progress) throws Exception;
     }
 
     @FunctionalInterface
     public interface Writer<T> {
+
         File write(T data) throws Exception;
     }
 }

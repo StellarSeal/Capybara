@@ -56,6 +56,7 @@ public class InventorySnapshot {
    }
 
    public enum ContainerType {
+
       PLAYER_INVENTORY,
       PLAYER_ENDER_CHEST,
       CONTAINER,
