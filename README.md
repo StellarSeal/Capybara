@@ -55,10 +55,10 @@ for details, click it to fill it in.
 | Sub-command | Permission | Description |
 |---|---|---|
 | `inv` · `ec` · `vault` · `ah` | `capybara.scan` | Find the held item in inventories / ender chests / PlayerVaults / zAuctionHouse |
-| `world <world>` | `capybara.scan` | Find the held item in every container and entity of a world |
+| `world <world> [since]` | `capybara.scan` | Find the held item in containers and entities of a world (optional age filter: `1h`, `24h`, `7d`) |
 | `home <radius>` | `capybara.scan` | Closest Essentials home / last location within the radius |
-| `poll <inv\|ec\|vault\|ah\|world> [world]` | `capybara.poll` | Tally every stored item of a region (console allowed) |
-| `status` | `capybara.admin` | Running scans with live progress |
+| `poll <inv\|ec\|vault\|ah\|world> [world] [since]` | `capybara.poll` | Tally every stored item of a region (console allowed) |
+| `status` · `cancel` | `capybara.admin` | Inspect running scans or cancel your active scan |
 | `nuke-chunk` · `nuke-container` | `capybara.nuke` | Empty containers |
 
 Reports keep their established format and go to `plugins/Capybara/scans/` and `plugins/Capybara/polls/`.
