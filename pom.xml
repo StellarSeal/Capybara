@@ -29,10 +29,10 @@
 
         <!-- project layout (maven.multiModuleProjectDirectory is pinned by the .mvn/ directory) -->
         <capybara.root>${maven.multiModuleProjectDirectory}</capybara.root>
-        <capybara.libs>${capybara.root}/libs</capybara.libs>
-        <capybara.compat>${capybara.libs}/compat</capybara.compat>
-        <capybara.nms.prebuilt>${capybara.libs}/nms</capybara.nms.prebuilt>
-        <capybara.nms.cooked>${capybara.root}/cook-nms/nms</capybara.nms.cooked>
+        <capybara.libs>${maven.multiModuleProjectDirectory}/libs</capybara.libs>
+        <capybara.compat>${maven.multiModuleProjectDirectory}/libs/compat</capybara.compat>
+        <capybara.nms.prebuilt>${maven.multiModuleProjectDirectory}/libs/nms</capybara.nms.prebuilt>
+        <capybara.nms.cooked>${maven.multiModuleProjectDirectory}/cook-nms/nms</capybara.nms.cooked>
 
         <!-- APIs -->
         <paper.api.version>1.21.4-R0.1-SNAPSHOT</paper.api.version>
