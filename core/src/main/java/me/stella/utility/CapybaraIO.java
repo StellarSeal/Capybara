@@ -3,73 +3,67 @@ package me.stella.utility;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.List;
 import java.util.Map;
 
-public class CapybaraIO {
-   public static void write(String seed, File out, List<Map.Entry<String, Integer>> data) {
-      try {
-         BufferedWriter writer = new BufferedWriter(new FileWriter(out));
-         writer.write(String.format("Seed:%s\n", seed));
-         writer.newLine();
+public final class CapybaraIO {
 
-         for(Map.Entry<String, Integer> d : data) {
-            String var10001 = (String)d.getKey();
-            writer.write(var10001 + " - " + NumberFormat.getInstance().format(d.getValue()));
+   private CapybaraIO() {
+   }
+
+   public static void write(String seed, File out, List<Map.Entry<String, Integer>> data) {
+      NumberFormat format = NumberFormat.getInstance();
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+         writer.write("Seed:" + seed);
+         writer.newLine();
+         writer.newLine();
+         for (Map.Entry<String, Integer> entry : data) {
+            writer.write(entry.getKey() + " - " + format.format(entry.getValue()));
             writer.newLine();
          }
-
          writer.flush();
-         writer.close();
-      } catch (Throwable t) {
-         t.printStackTrace();
+      } catch (IOException e) {
+         e.printStackTrace();
       }
-
    }
 
    public static void write(String seed, File out, List<Map.Entry<String, Double>> data, boolean useDouble) {
-      try {
-         BufferedWriter writer = new BufferedWriter(new FileWriter(out));
-         writer.write(String.format("Seed:%s\n", seed));
+      NumberFormat format = NumberFormat.getInstance();
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+         writer.write("Seed:" + seed);
          writer.newLine();
-
-         for(Map.Entry<String, Double> d : data) {
-            String var10001 = (String)d.getKey();
-            writer.write(var10001 + " - " + NumberFormat.getInstance().format(d.getValue()));
+         writer.newLine();
+         for (Map.Entry<String, Double> entry : data) {
+            writer.write(entry.getKey() + " - " + format.format(entry.getValue()));
             writer.newLine();
          }
-
          writer.flush();
-         writer.close();
-      } catch (Throwable t) {
-         t.printStackTrace();
+      } catch (IOException e) {
+         e.printStackTrace();
       }
-
    }
 
    public static void writePoll(String header, File out, List<Map.Entry<String, Integer>> data) {
-      try {
-         BufferedWriter writer = new BufferedWriter(new FileWriter(out));
-         writer.write(String.format("Poll Type: %s\n", header));
-         writer.write(String.format("Timestamp: %d\n", System.currentTimeMillis()));
+      NumberFormat format = NumberFormat.getInstance();
+      try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
+         writer.write("Poll Type: " + header);
+         writer.newLine();
+         writer.write("Timestamp: " + System.currentTimeMillis());
+         writer.newLine();
          writer.newLine();
          writer.write("Search ID -> Count");
          writer.newLine();
          writer.write("=".repeat(50));
          writer.newLine();
-
-         for(Map.Entry<String, Integer> d : data) {
-            String var10001 = (String)d.getKey();
-            writer.write(var10001 + " -> " + NumberFormat.getInstance().format(d.getValue()));
+         for (Map.Entry<String, Integer> entry : data) {
+            writer.write(entry.getKey() + " -> " + format.format(entry.getValue()));
             writer.newLine();
          }
-
          writer.flush();
-         writer.close();
-      } catch (Throwable t) {
-         t.printStackTrace();
+      } catch (IOException e) {
+         e.printStackTrace();
       }
-
    }
 }

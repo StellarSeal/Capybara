@@ -10,38 +10,38 @@ import me.stella.Capybara;
 import me.stella.utility.CapybaraIO;
 
 /** Writes scan / poll reports in the established formats ({@code scans/<nanos>_<kind>.txt}, {@code polls/...}). */
-final class Reports {
+public final class Reports {
 
     private Reports() {
     }
 
     /** Scan report, rows sorted ascending by count. */
-    static File scan(String kind, String seed, Map<String, Integer> data) {
+    public static File scan(String kind, String seed, Map<String, Integer> data) {
         return scan(kind, seed, data.entrySet());
     }
 
-    static File scan(String kind, String seed, Collection<Map.Entry<String, Integer>> rows) {
+    public static File scan(String kind, String seed, Collection<Map.Entry<String, Integer>> rows) {
         File file = file("scans", kind);
         CapybaraIO.write(seed, file, rows.stream().sorted(Map.Entry.comparingByValue()).toList());
         return file;
     }
 
     /** Scan report, rows sorted by key. */
-    static File scanByKey(String kind, String seed, Map<String, Integer> data) {
+    public static File scanByKey(String kind, String seed, Map<String, Integer> data) {
         File file = file("scans", kind);
         CapybaraIO.write(seed, file, data.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList());
         return file;
     }
 
     /** Distance report (home scans), rows sorted ascending by distance. */
-    static File distances(String kind, String seed, Map<String, Double> data) {
+    public static File distances(String kind, String seed, Map<String, Double> data) {
         File file = file("scans", kind);
         CapybaraIO.write(seed, file, data.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList(), true);
         return file;
     }
 
     /** Poll report, rows sorted descending by count. */
-    static File poll(String header, String kind, Map<String, Integer> data) {
+    public static File poll(String header, String kind, Map<String, Integer> data) {
         File file = file("polls", "poll_" + kind);
         CapybaraIO.writePoll(header, file, data.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())).toList());
@@ -49,7 +49,7 @@ final class Reports {
     }
 
     /** Flattens per-player vault pools into one row list. */
-    static List<Map.Entry<String, Integer>> flatten(Map<String, Map<String, Integer>> pools) {
+    public static List<Map.Entry<String, Integer>> flatten(Map<String, Map<String, Integer>> pools) {
         List<Map.Entry<String, Integer>> rows = new ArrayList<>();
         pools.values().forEach(pool -> rows.addAll(pool.entrySet()));
         return rows;

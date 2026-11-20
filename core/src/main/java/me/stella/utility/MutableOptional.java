@@ -4,22 +4,23 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 public class MutableOptional<T> {
+
    private T object;
 
    public MutableOptional(T object) {
-      this.set(object);
+      this.object = object;
    }
 
    public static <T> MutableOptional<T> of(T object) {
-      return new MutableOptional<T>(object);
+      return new MutableOptional<>(object);
    }
 
    public static <T> MutableOptional<T> empty() {
-      return new MutableOptional<T>(null);
+      return new MutableOptional<>(null);
    }
 
    public boolean isSet() {
-      return this.object != null;
+      return object != null;
    }
 
    public void set(T object) {
@@ -27,26 +28,26 @@ public class MutableOptional<T> {
    }
 
    public T get() {
-      return this.object;
+      return object;
    }
 
    public T provide(Supplier<T> provider) {
-      if (!this.isSet()) {
-         this.set(provider.get());
+      if (!isSet()) {
+         object = provider.get();
       }
-
-      return this.object;
+      return object;
    }
 
    public Optional<T> asOptional() {
-      return Optional.ofNullable(this.object);
+      return Optional.ofNullable(object);
    }
 
    public void clear() {
-      this.set(null);
+      object = null;
    }
 
+   @Override
    public String toString() {
-      return !this.isSet() ? "" : String.valueOf(this.object);
+      return isSet() ? String.valueOf(object) : "";
    }
 }

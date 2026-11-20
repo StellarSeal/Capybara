@@ -16,31 +16,40 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class CapybaraScan {
+public final class CapybaraScan {
+
    private static final NamespacedKey EXCELLENT_CRATES_ID = new NamespacedKey("excellentcrates", "crate_key.id");
    private static final NamespacedKey CRAZY_VOUCHERS_ID = new NamespacedKey("crazyvouchers", "crazyvouchers_voucher_item");
-   private static final MutableOptional<CapybaraNative> scanner = MutableOptional.<CapybaraNative>empty();
-   private static final ThreadPoolExecutor executor;
+   private static final MutableOptional<CapybaraNative> SCANNER = MutableOptional.empty();
+   private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(
+         8, 8, 60L, TimeUnit.SECONDS,
+         new LinkedBlockingDeque<>(24576),
+         new ThreadFactoryBuilder().setPriority(5).setNameFormat("Capybara-Scanner-%d").setDaemon(true).build());
 
-   public static void process(Runnable r) {
-      executor.execute(r);
+   private CapybaraScan() {
    }
 
-   public static CompletableFuture<Void> runAsync(Runnable r) {
-      return CompletableFuture.runAsync(r, executor);
+   public static void process(Runnable task) {
+      EXECUTOR.execute(task);
+   }
+
+   public static CompletableFuture<Void> runAsync(Runnable task) {
+      return CompletableFuture.runAsync(task, EXECUTOR);
    }
 
    public static CapybaraNative get() {
-      return (CapybaraNative)scanner.asOptional().orElseThrow(() -> new IllegalStateException("Plugin has not loaded the native framework!"));
+      return SCANNER.asOptional()
+            .orElseThrow(() -> new IllegalStateException("Plugin has not loaded the native framework!"));
    }
 
    public static CapybaraNative load(@NotNull CapybaraNative instance) {
-      return scanner.provide(() -> instance);
+      return SCANNER.provide(() -> instance);
    }
 
    private static boolean isPluginEnabled(String plugin) {
-      return Bukkit.getPluginManager().getPlugin(plugin) != null && Bukkit.getPluginManager().isPluginEnabled(plugin);
+      return Bukkit.getPluginManager().isPluginEnabled(plugin);
    }
 
    public static boolean supportMMOItems() {
@@ -55,45 +64,33 @@ public class CapybaraScan {
       return isPluginEnabled("zAuctionHouseV3");
    }
 
-   public static String toMMOID(ItemStack itemStack) {
-      if (!supportMMOItems()) {
-         return null;
-      } else if (itemStack != null && itemStack.getType() != Material.AIR) {
-         Type t = Type.get(itemStack);
-         if (t == null) {
-            return null;
-         } else {
-            String var10000 = t.getId();
-            return var10000 + ":" + MMOItems.getID(itemStack);
-         }
-      } else {
+   public static @Nullable String toMMOID(@Nullable ItemStack itemStack) {
+      if (!supportMMOItems() || itemStack == null || itemStack.getType() == Material.AIR) {
          return null;
       }
+      Type type = Type.get(itemStack);
+      return type == null ? null : type.getId() + ":" + MMOItems.getID(itemStack);
    }
 
-   public static String toPluginItemID(ItemStack itemStack) {
-      if (itemStack != null && itemStack.getType() != Material.AIR) {
-         String mmoId = toMMOID(itemStack);
-         if (mmoId != null) {
-            return "MMOITEMS:" + mmoId;
-         } else {
-            ItemMeta meta = itemStack.getItemMeta();
-            if (meta == null) {
-               return null;
-            } else {
-               PersistentDataContainer pdc = meta.getPersistentDataContainer();
-               String crateId = (String)pdc.get(EXCELLENT_CRATES_ID, PersistentDataType.STRING);
-               if (crateId != null) {
-                  return "EXCELLENTCRATES:" + crateId;
-               } else {
-                  String voucherId = (String)pdc.get(CRAZY_VOUCHERS_ID, PersistentDataType.STRING);
-                  return voucherId != null ? "CRAZYVOUCHERS:" + voucherId : null;
-               }
-            }
-         }
-      } else {
+   public static @Nullable String toPluginItemID(@Nullable ItemStack itemStack) {
+      if (itemStack == null || itemStack.getType() == Material.AIR) {
          return null;
       }
+      String mmoId = toMMOID(itemStack);
+      if (mmoId != null) {
+         return "MMOITEMS:" + mmoId;
+      }
+      ItemMeta meta = itemStack.getItemMeta();
+      if (meta == null) {
+         return null;
+      }
+      PersistentDataContainer pdc = meta.getPersistentDataContainer();
+      String crateId = pdc.get(EXCELLENT_CRATES_ID, PersistentDataType.STRING);
+      if (crateId != null) {
+         return "EXCELLENTCRATES:" + crateId;
+      }
+      String voucherId = pdc.get(CRAZY_VOUCHERS_ID, PersistentDataType.STRING);
+      return voucherId != null ? "CRAZYVOUCHERS:" + voucherId : null;
    }
 
    public static String toSearchItemID(ItemStack itemStack) {
@@ -102,10 +99,6 @@ public class CapybaraScan {
    }
 
    public static void shutdown() {
-      executor.shutdownNow();
-   }
-
-   static {
-      executor = new ThreadPoolExecutor(8, 8, 60L, TimeUnit.SECONDS, new LinkedBlockingDeque<>(24576), (new ThreadFactoryBuilder()).setPriority(5).setNameFormat("Capybara Scanner Thread").setThreadFactory(Thread::new).build());
+      EXECUTOR.shutdownNow();
    }
 }

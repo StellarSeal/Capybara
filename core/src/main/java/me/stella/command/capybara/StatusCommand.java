@@ -2,9 +2,9 @@ package me.stella.command.capybara;
 
 import java.util.Collection;
 import me.stella.Capybara;
-import me.stella.command.SubCommandHandler;
+import me.stella.command.suggestion.SubCommandHandler;
 import me.stella.command.annotations.SubCommandMeta;
-import me.stella.scan.ScanSession;
+import me.stella.scan.model.ScanSession;
 import me.stella.ui.Messages;
 import org.bukkit.command.CommandSender;
 

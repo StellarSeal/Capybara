@@ -1,11 +1,11 @@
 package me.stella;
 
 import java.io.File;
-import me.stella.command.CommandDiscovery;
-import me.stella.duplication.DuplicationDetectionConfig;
-import me.stella.duplication.DuplicationDetectionListener;
-import me.stella.duplication.DuplicationDetectionModule;
-import me.stella.scan.ScanService;
+import me.stella.command.dispatch.CommandDiscovery;
+import me.stella.duplication.config.DuplicationDetectionConfig;
+import me.stella.duplication.engine.DuplicationDetectionListener;
+import me.stella.duplication.engine.DuplicationDetectionModule;
+import me.stella.scan.engine.ScanService;
 import me.stella.ui.Theme;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -15,10 +15,12 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 public final class Capybara extends JavaPlugin {
+
    private static final boolean IS_FOLIA = detectFolia();
    private static Capybara main;
    private static DuplicationDetectionModule duplicationModule;
    private static ScanService scanService;
+
    private CommandDiscovery commands;
 
    public static Capybara get() {
@@ -37,31 +39,32 @@ public final class Capybara extends JavaPlugin {
    public void onEnable() {
       main = this;
       bindNativeLayer();
-      if (!this.getDataFolder().exists()) {
-         this.getDataFolder().mkdirs();
+      if (!getDataFolder().exists()) {
+         getDataFolder().mkdirs();
       }
       scanService = new ScanService(this);
       commands = new CommandDiscovery(this);
       commands.discoverAndRegister("me.stella.command");
-      this.initializeDuplicationDetection();
+      initializeDuplicationDetection();
       System.gc();
    }
 
-   /** Resolves {@code me.stella.nativelib.Capybara<minor*100+patch>[Folia]} for the running server. */
    private void bindNativeLayer() {
       try {
-         String[] bukkitVersion = this.getServer().getBukkitVersion().split("\\.");
+         String[] bukkitVersion = getServer().getBukkitVersion().split("\\.");
          int nativeKey = Integer.parseInt(bukkitVersion[1]) * 100
-                 + Integer.parseInt(bukkitVersion[2].substring(0, bukkitVersion[2].indexOf("-")));
+               + Integer.parseInt(bukkitVersion[2].substring(0, bukkitVersion[2].indexOf("-")));
          String nativeClass = "me.stella.nativelib.Capybara" + nativeKey;
          if (IS_FOLIA) {
             nativeClass = nativeClass + "Folia";
-            Bukkit.getConsoleSender().sendMessage(Component.text("Folia detected - Attempting to resolve class name", Theme.HIGHLIGHT));
+            Bukkit.getConsoleSender().sendMessage(
+                  Component.text("Folia detected - Attempting to resolve class name", Theme.HIGHLIGHT));
          }
-         Class<?> nativeImplClass = Class.forName(nativeClass, true, this.getClass().getClassLoader());
+         Class<?> nativeImplClass = Class.forName(nativeClass, true, getClass().getClassLoader());
          CapybaraScan.load((CapybaraNative) nativeImplClass.getConstructor().newInstance());
-         Bukkit.getConsoleSender().sendMessage(Component.text("Binding process [Capybara] to native access level "
-                 + nativeKey + " at " + nativeImplClass.getName(), Theme.PRIMARY));
+         Bukkit.getConsoleSender().sendMessage(Component.text(
+               "Binding process [Capybara] to native access level " + nativeKey + " at " + nativeImplClass.getName(),
+               Theme.PRIMARY));
       } catch (Throwable t) {
          t.printStackTrace();
       }
@@ -69,17 +72,17 @@ public final class Capybara extends JavaPlugin {
 
    @Override
    public void saveResource(@NotNull String path, boolean replace) {
-      File location = new File(this.getDataFolder(), path);
+      File location = new File(getDataFolder(), path);
       if (replace || !location.exists()) {
          super.saveResource(path, replace);
       }
    }
 
    private void initializeDuplicationDetection() {
-      this.saveResource("duplication_detection.yml", false);
-      File configFile = new File(this.getDataFolder(), "duplication_detection.yml");
+      saveResource("duplication_detection.yml", false);
+      File configFile = new File(getDataFolder(), "duplication_detection.yml");
       FileConfiguration configuration = YamlConfiguration.loadConfiguration(configFile);
-      File logsDir = new File(this.getDataFolder(), "logs");
+      File logsDir = new File(getDataFolder(), "logs");
       DuplicationDetectionConfig config = DuplicationDetectionConfig.fromYaml(configuration);
       duplicationModule = new DuplicationDetectionModule(config, logsDir);
       duplicationModule.initialize();

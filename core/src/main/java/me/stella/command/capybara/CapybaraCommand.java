@@ -1,6 +1,6 @@
 package me.stella.command.capybara;
 
-import me.stella.command.DispatchingCommand;
+import me.stella.command.dispatch.DispatchingCommand;
 import me.stella.command.annotations.CommandMeta;
 
 /** {@code /capybara} - dispatches to the sub-commands in this package. */

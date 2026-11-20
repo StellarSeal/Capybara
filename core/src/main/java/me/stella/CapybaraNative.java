@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import me.stella.scan.ScanProgress;
+import me.stella.scan.model.ScanProgress;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -37,7 +37,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Version-specific scanner contract, implemented once per NMS module ({@code me.stella.nativelib.Capybara<key>}).
  *
  * <p>Every scan reports into a {@link ScanProgress}: it declares a total of work units, advances once per unit and
- * exposes its live output so the {@link me.stella.scan.ScanMonitor} can render it.</p>
+ * exposes its live output so the {@link me.stella.scan.monitor.ScanMonitor} can render it.</p>
  */
 public interface CapybaraNative {
 
